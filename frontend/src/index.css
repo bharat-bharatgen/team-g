@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* BharatGen Brand Colors */
+    --background: 210 20% 98%;
+    --foreground: 213 63% 15%;
+    --card: 0 0% 100%;
+    --card-foreground: 213 63% 15%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 213 63% 15%;
+    --primary: 213 63% 34%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 30% 96%;
+    --secondary-foreground: 213 63% 20%;
+    --muted: 210 25% 95%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 27 82% 53%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 213 63% 34%;
+    --radius: 0.75rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  /* Soft gradient for auth pages */
+  .bg-auth-gradient {
+    background: linear-gradient(135deg, hsl(210 30% 97%) 0%, hsl(213 40% 96%) 50%, hsl(210 25% 98%) 100%);
+  }
+}
