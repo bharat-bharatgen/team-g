@@ -1,0 +1,84 @@
+version: "3.8"
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: insure-copilot-DB
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: insurance_copilot
+    networks:
+      - insurecopilot-net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: insure-copilot-BE
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - MONGODB_URL=mongodb://insure-copilot-DB:27017
+    ports:
+      - "48000:48000"
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "48000"]
+    depends_on:
+      - mongodb
+    networks:
+      - insurecopilot-net
+      - bharat-network
+    mem_limit: 4g
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:48000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: insure-copilot-WORKER
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - MONGODB_URL=mongodb://insure-copilot-DB:27017
+    command: ["python", "-m", "app.worker"]
+    depends_on:
+      - mongodb
+    networks:
+      - insurecopilot-net
+      - bharat-network
+    mem_limit: 4g
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api/v1
+        VITE_APP_NAME: InsureCopilot
+    container_name: insure-copilot-FE
+    restart: unless-stopped
+    ports:
+      - "43000:43000"
+    depends_on:
+      - backend
+    networks:
+      - insurecopilot-net
+
+volumes:
+  mongodb_data:
+
+networks:
+  insurecopilot-net:
+    driver: bridge
+  bharat-network:
+    external: true
