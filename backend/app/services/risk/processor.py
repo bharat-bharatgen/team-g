@@ -10,6 +10,7 @@ Main orchestration for risk analysis pipeline:
 
 import json
 import logging
+import time
 from datetime import datetime
 from typing import Any, Dict, Optional, Tuple
 
@@ -18,6 +19,7 @@ from bson import ObjectId
 from app.dependencies import get_database
 from app.models.risk_result import RiskResultModel
 from app.services.llm import client as llm_client
+from app.services.llm.context import current_case_id, current_task, current_call_count
 from app.services.risk.pre_processor import prepare_llm_input
 from app.services.risk.post_processor import post_process_response
 from app.services.risk.prompts.analysis import (
@@ -135,6 +137,11 @@ async def process_risk(case_id: str) -> Dict[str, Any]:
     Returns:
         Dict with status and result info
     """
+    current_case_id.set(case_id)
+    current_task.set("risk")
+    call_counter = [0]
+    current_call_count.set(call_counter)
+
     logger.info(f"Starting risk analysis for case {case_id}")
 
     # Step 1: Load latest MER and pathology results
@@ -163,10 +170,17 @@ async def process_risk(case_id: str) -> Dict[str, Any]:
     user_prompt = build_user_prompt(llm_input)
     logger.info(f"Calling LLM for risk analysis (model: {CONFIG.model})")
 
+    t_llm = time.monotonic()
     llm_response_text = await llm_client.call(
         system_prompt=SYSTEM_PROMPT,
         user_prompt=user_prompt,
         config=CONFIG,
+    )
+    llm_wall = time.monotonic() - t_llm
+
+    logger.info(
+        "LLM_PIPELINE,case_id=%s,task=risk,total_calls=%s,llm_wall_s=%.2f,calls_per_sec=%.2f",
+        case_id, call_counter[0], llm_wall, call_counter[0] / llm_wall if llm_wall > 0 else 0,
     )
 
     # Parse JSON response

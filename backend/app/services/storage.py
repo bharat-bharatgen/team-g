@@ -7,12 +7,14 @@ from app.config import settings
 
 class S3Service:
     def __init__(self):
-        self.s3_client = boto3.client(
-            "s3",
+        client_kwargs = dict(
             aws_access_key_id=settings.aws_access_key_id,
             aws_secret_access_key=settings.aws_secret_access_key,
             region_name=settings.aws_region,
         )
+        if settings.s3_endpoint_url:
+            client_kwargs["endpoint_url"] = settings.s3_endpoint_url
+        self.s3_client = boto3.client("s3", **client_kwargs)
         self.bucket_name = settings.s3_bucket_name
 
     def _build_s3_key(self, case_id: str, document_type: str, file_id: str, file_name: str) -> str:

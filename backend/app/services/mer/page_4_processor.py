@@ -33,7 +33,7 @@ logger = logging.getLogger("mer_page4_processor")
 # ─── Configuration ───────────────────────────────────────────────────────────
 
 # Set to False to use the original single-call method
-USE_SPLIT_PROCESSING = True
+USE_SPLIT_PROCESSING = False
 
 # Set to True to save cropped images locally for debugging
 DEBUG_SAVE_CROPS = False
@@ -332,20 +332,26 @@ async def _extract_full_page(image_bytes: bytes) -> dict:
 async def extract_page_4_split(image_bytes: bytes) -> dict:
     """
     Extract Page 4 data using split processing (3 sections).
-    Falls back to full page if no anchors are found.
-    
-    Args:
-        image_bytes: The full page image bytes
-        
-    Returns:
-        Combined dict with all sections
+    Falls back to full page if anchors are missing, partial, or nonsensical.
     """
-    # Check if we can find any anchors
     section_2_y, section_3_y, img_height = _detect_section_boundaries(image_bytes)
-    
-    # If no anchors found at all, use full page to avoid losing data
+
     if section_2_y is None and section_3_y is None:
         logger.warning("No section anchors found - using full page fallback")
+        return await _extract_full_page(image_bytes)
+
+    if section_2_y is None or section_3_y is None:
+        logger.warning(
+            "Partial anchors (sec2=%s, sec3=%s) - using full page fallback",
+            section_2_y, section_3_y,
+        )
+        return await _extract_full_page(image_bytes)
+
+    if section_2_y >= section_3_y:
+        logger.warning(
+            "Anchors out of order (sec2=%s >= sec3=%s) - using full page fallback",
+            section_2_y, section_3_y,
+        )
         return await _extract_full_page(image_bytes)
     
     logger.info("Processing Page 4 with split method (physical + systemic + certificate)")

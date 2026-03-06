@@ -27,6 +27,7 @@ from app.services.risk.processor import process_risk
 from app.services.face_match.processor import process_face_match as process_face_match_v1
 from app.services.face_match_v2.processor import process_face_match_v2
 from app.services.location_check.processor import process_location_check
+from app.services.task_queue import enqueue_task
 
 
 def _get_face_match_processor():
@@ -76,6 +77,9 @@ async def _run_mer(case_id: str, mer_files: List[dict]) -> Dict[str, Any]:
         # Trigger risk analysis if conditions are met
         await _maybe_trigger_risk(case_id)
 
+        # Trigger test verification if both MER and pathology are done
+        await _maybe_trigger_test_verification(case_id)
+
         return {"pipeline": "mer", "status": "extracted", "result": result}
     except Exception as e:
         await _update_pipeline_status(
@@ -97,6 +101,9 @@ async def _run_pathology(case_id: str, path_files: List[dict]) -> Dict[str, Any]
 
         # Trigger location check (needs pathology OCR for lab address)
         await _maybe_trigger_location_check(case_id)
+
+        # Trigger test verification if both MER and pathology are done
+        await _maybe_trigger_test_verification(case_id)
 
         return {"pipeline": "pathology", "status": "extracted", "result": result}
     except Exception as e:
@@ -229,14 +236,76 @@ async def _maybe_trigger_risk(case_id: str):
     )
 
     if result:
-        # We won the race - run risk analysis
-        logger.info(f"Triggering risk analysis for case {case_id}")
-        asyncio.create_task(_run_risk(case_id))
+        logger.info(f"Enqueuing risk analysis for case {case_id}")
+        await enqueue_task(case_id, "risk")
     else:
         logger.info(
             f"Risk analysis trigger race lost for case {case_id}, "
             "another process is handling it"
         )
+
+
+async def _run_test_verification(case_id: str) -> Dict[str, Any]:
+    """Run test verification Phase 2 (compare requirements vs pathology)."""
+    try:
+        from app.services.test_verification.processor import complete_verification
+        result = await complete_verification(case_id)
+        return {"pipeline": "test_verification", "status": "extracted", "result": result}
+    except Exception as e:
+        await _update_pipeline_status(
+            case_id, "test_verification", "failed",
+            error_message=str(e), error_traceback=traceback.format_exc(),
+        )
+        logger.error(f"Test verification failed for case {case_id}: {e}")
+        return {"pipeline": "test_verification", "status": "failed", "error": str(e)}
+
+
+async def _maybe_trigger_test_verification(case_id: str):
+    """
+    Trigger test verification once both MER and pathology have completed.
+
+    The requirements extraction (Phase 1) happens inside MER processing.
+    This function triggers Phase 2 — comparing those requirements against
+    pathology results — only when both pipelines are done.
+    """
+    db = await get_database()
+
+    case = await db.cases.find_one({"_id": ObjectId(case_id)})
+    if not case:
+        logger.error(f"Case {case_id} not found for test verification trigger")
+        return
+
+    pipeline_status = case.get("pipeline_status", {})
+    documents = case.get("documents", {})
+
+    mer_status = pipeline_status.get("mer", "not_started")
+    path_status = pipeline_status.get("pathology", "not_started")
+    tv_status = pipeline_status.get("test_verification", "not_started")
+
+    path_uploaded = bool(documents.get("pathology"))
+
+    mer_ready = mer_status in ("extracted", "reviewed")
+    path_ready = path_status in ("extracted", "reviewed")
+
+    # MER must be ready (it does the extraction). Pathology must be ready
+    # OR not uploaded (if no pathology, tests just won't match).
+    if not (mer_ready and (path_ready or not path_uploaded)):
+        logger.info(
+            f"Test verification not triggered for case {case_id}: "
+            f"mer={mer_status}, path={path_status}, path_uploaded={path_uploaded}"
+        )
+        return
+
+    # Only trigger if extraction happened (status == pending_verification)
+    if tv_status != "pending_verification":
+        logger.info(
+            f"Test verification skipped for case {case_id}: "
+            f"tv_status={tv_status} (not pending_verification)"
+        )
+        return
+
+    logger.info(f"Enqueuing test_verification for case {case_id}")
+    await enqueue_task(case_id, "test_verification")
 
 
 async def _maybe_trigger_location_check(case_id: str):
@@ -294,9 +363,8 @@ async def _maybe_trigger_location_check(case_id: str):
     )
 
     if result:
-        # We won the race - run location check
-        logger.info(f"Triggering location check for case {case_id}")
-        asyncio.create_task(_run_location_check(case_id, photo_files, id_files))
+        logger.info(f"Enqueuing location check for case {case_id}")
+        await enqueue_task(case_id, "location_check")
     else:
         logger.info(
             f"Location check trigger race lost for case {case_id}, "

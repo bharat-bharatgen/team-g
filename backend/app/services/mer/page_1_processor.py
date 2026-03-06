@@ -28,7 +28,7 @@ logger = logging.getLogger("mer_page1_processor")
 # ─── Configuration ───────────────────────────────────────────────────────────
 
 # Set to False to use the original single-call method
-USE_SPLIT_PROCESSING = True
+USE_SPLIT_PROCESSING = False
 
 # Set to True to save cropped images locally for debugging
 DEBUG_SAVE_CROPS = False
@@ -305,20 +305,21 @@ async def _extract_full_page(image_bytes: bytes) -> dict:
 async def extract_page_1_split(image_bytes: bytes) -> dict:
     """
     Extract Page 1 data using split processing (header + questions separately).
-    Falls back to full page if no anchors are found.
-    
-    Args:
-        image_bytes: The full page image bytes
-        
-    Returns:
-        Combined dict with both "header" and "questions" keys
+    Falls back to full page if anchor is missing or at a nonsensical position.
     """
-    # Check if we can find any anchors
     section_y, img_height = _detect_section_boundary(image_bytes)
-    
-    # If no anchor found, use full page to avoid losing data
+
     if section_y is None:
         logger.warning("No section anchor found - using full page fallback")
+        return await _extract_full_page(image_bytes)
+
+    min_y = int(img_height * 0.10)
+    max_y = int(img_height * 0.60)
+    if section_y < min_y or section_y > max_y:
+        logger.warning(
+            "Anchor at Y=%s outside reasonable range (%s-%s) - using full page fallback",
+            section_y, min_y, max_y,
+        )
         return await _extract_full_page(image_bytes)
     
     logger.info("Processing Page 1 with split method (header + questions)")

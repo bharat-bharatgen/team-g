@@ -8,9 +8,7 @@ from app.services.llm.config import LLMCallConfig
 
 
 CONFIG = LLMCallConfig(
-#    base_url="http://10.67.18.3:8003/v1/chat/completions",
 #    model="openai/gpt-oss-120b",
-    base_url="https://apps.bharatgen.dev/inference/v1/chat/completions",
     model="gpt-oss-120b",
     temperature=0.0,
     response_format="json_object",

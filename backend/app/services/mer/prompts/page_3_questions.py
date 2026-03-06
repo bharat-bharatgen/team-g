@@ -6,8 +6,7 @@ Used when split processing is enabled for better accuracy.
 from app.services.llm.config import LLMCallConfig
 
 CONFIG = LLMCallConfig(
-    base_url="https://apps.bharatgen.dev/inference/v1/chat/completions",
-    model="qwen3-vl-32b",
+    model="qwen3.5-27b",
     temperature=0.0,
     response_format="json_object",
     top_p=1,
@@ -80,6 +79,13 @@ Normalize to: "Yes", "No", or null (if unclear)
   - Chewing tobacco: "[X] pouches/day" or just a number
   - Common formats: "10 sticks", "5/day", "10-15", "1 pack"
 </tobacco_questions>
+
+<!!!SPECIAL_CARE!!!>
+Some people fill number of cigaretts or pouches with N or No sometimes. This means they don't smoke tobacco.
+In such cases, set the number to null or No.
+If you see any text in number of cigaretts or pouches, analyze it properly and extract the information.
+Don't generate the content of the number of cigaretts or pouches. Only extract the information as it is.
+</!!!SPECIAL_CARE!!!>
 
 <female_questions>
 Question 11 (For Females):

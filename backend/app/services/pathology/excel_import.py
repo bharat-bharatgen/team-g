@@ -22,17 +22,18 @@ from app.services.pathology.range_utils import compute_range_status
 
 
 # Column indices (0-based, after hidden column A at index 0)
-# Columns: A=id, B=Parameter, C=Value, D=Unit, E=Report Range, F=Standard Range, G=Status, H=Method, I=Is Standard, J=Source
+# Columns: A=id, B=Parameter, C=Original Name, D=Value, E=Unit, F=Report Range, G=Standard Range, H=Status, I=Method, J=Is Standard, K=Source
 COL_ID = 0
 COL_PARAMETER = 1
-COL_VALUE = 2
-COL_UNIT = 3
-COL_REPORT_RANGE = 4
-COL_STANDARD_RANGE = 5
-COL_STATUS = 6
-COL_METHOD = 7
-COL_IS_STANDARD = 8
-COL_SOURCE = 9
+COL_ORIGINAL_NAME = 2
+COL_VALUE = 3
+COL_UNIT = 4
+COL_REPORT_RANGE = 5
+COL_STANDARD_RANGE = 6
+COL_STATUS = 7
+COL_METHOD = 8
+COL_IS_STANDARD = 9
+COL_SOURCE = 10
 
 
 def _parse_excel(file_bytes: bytes) -> Tuple[List[dict], dict]:
@@ -70,6 +71,7 @@ def _parse_excel(file_bytes: bytes) -> Tuple[List[dict], dict]:
         rows.append({
             "id": str(field_id),
             "key": str(row[COL_PARAMETER].value or ""),
+            "reference_name": str(row[COL_ORIGINAL_NAME].value) if row[COL_ORIGINAL_NAME].value else None,
             "value": str(row[COL_VALUE].value) if row[COL_VALUE].value else None,
             "unit": str(row[COL_UNIT].value) if row[COL_UNIT].value else None,
             "reference_range": str(row[COL_REPORT_RANGE].value) if row[COL_REPORT_RANGE].value else None,
@@ -128,6 +130,7 @@ def _build_updated_fields(
                 config_range=config_range,
                 range_status=range_status,
                 method=row["method"],
+                reference_name=row.get("reference_name"),
                 is_standard=row["is_standard"],
                 source=FieldSource.USER,
             ))
@@ -150,7 +153,7 @@ def _build_updated_fields(
                 config_range=config_range or prev.config_range,
                 range_status=range_status,
                 method=row["method"],
-                reference_name=prev.reference_name,
+                reference_name=row.get("reference_name") or prev.reference_name,
                 sample_type=prev.sample_type,
                 section_path=prev.section_path,
                 is_standard=row["is_standard"],

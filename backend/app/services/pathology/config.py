@@ -467,7 +467,7 @@ STANDARD_PARAMETERS = {
     "Urine Sugar": {
         "unit": None,
         "range": "Nil",
-        "aliases": ["Glucose Urine", "Sugar Urine", "Reducing Substances", "Urine Glucose"],
+        "aliases": ["Glucose Urine", "Sugar Urine", "Reducing Substances", "Urine Glucose", "Reducing Sugar"],
     },
     "Microalbumin": {
         "unit": "mg/L",

@@ -7,13 +7,11 @@ adding/changing parameters only requires editing the config file.
 """
 
 from app.services.llm.config import LLMCallConfig
-from app.services.pathology.config import STANDARD_PARAMETERS
+from app.services.pathology.config import STANDARD_PARAMETERS, NEW_PARAMS
 
 
 CONFIG = LLMCallConfig(
-#    base_url="http://10.67.18.3:8002/v1/chat/completions",
 #    model="Qwen/Qwen3-14B",
-    base_url="https://apps.bharatgen.dev/inference/v1/chat/completions",
     #model="qwen3-14b",
     model="gpt-oss-120b",
     temperature=0.0,
@@ -137,7 +135,42 @@ CRITICAL: All numeric values must be parsable by code.
 Return ONLY the JSON object. No explanations or markdown."""
 
 
+def _build_unit_range_reference() -> str:
+    """Build a unit + typical range reference table from NEW_PARAMS for the LLM to sanity-check extractions."""
+    sections = []
+    for sample_type, label in [("blood", "BLOOD"), ("urine", "URINE"), ("special", "SPECIAL")]:
+        params = NEW_PARAMS.get(sample_type, {})
+        if not params:
+            continue
+        lines = []
+        for name, info in params.items():
+            unit = info.get("unit") or "—"
+            rng = info.get("range")
+            if isinstance(rng, dict):
+                parts = [f"{g}: {r[0]}–{r[1]}" for g, r in rng.items() if isinstance(r, list)]
+                rng_str = ", ".join(parts)
+            elif isinstance(rng, list) and len(rng) == 2:
+                lo, hi = rng
+                if lo is None and hi is not None:
+                    rng_str = f"< {hi}"
+                elif hi is None and lo is not None:
+                    rng_str = f"> {lo}"
+                elif lo is not None and hi is not None:
+                    rng_str = f"{lo}–{hi}"
+                else:
+                    rng_str = "—"
+            elif rng:
+                rng_str = str(rng)
+            else:
+                rng_str = "—"
+            lines.append(f"- {name}: {unit}, typical {rng_str}")
+        sections.append(f"{label}:\n" + "\n".join(lines))
+    return "\n\n".join(sections)
+
+
 def build_system_prompt_v2() -> str:
+    unit_range_ref = _build_unit_range_reference()
+
     return """You are a medical data extraction system. Given OCR-extracted text from a single pathology report page, extract and standardize test results.
 
 <input_format>
@@ -260,6 +293,18 @@ OTHER UNITS:
 - g%, gm/dl, gm/dL → "g/dL"
 - Keep mg/dL and mmol/L as-is
 </unit_standardization>
+
+<unit_and_range_reference>
+Use these standard units and typical normal ranges as a SANITY CHECK when the report's units are ambiguous, missing, or OCR-garbled.
+If the extracted value's order of magnitude doesn't make sense for the listed unit, apply the appropriate conversion (lakhs, millions, etc.).
+
+Examples:
+- RBC value ~4-6 with unit "million/µL" → must become ~4,000,000-6,000,000 cells/µL
+- Platelets value ~1.5-4.0 with unit "lakhs" → must become ~150,000-400,000 cells/µL
+- If a value's magnitude is off by 10^3 or 10^5 from the expected range below, the unit likely needs conversion
+
+""" + unit_range_ref + """
+</unit_and_range_reference>
 
 <range_edge_cases>
 CRITICAL: Preserve inequality direction exactly as written in the report.
@@ -407,7 +452,7 @@ URINE MAPPINGS (sample_type will be "urine"):
 - Crystal → Crystals
 
 CRITICAL - CONTEXT-AWARE MAPPING:
-When a test appears in a URINE section (identified by section headers like "URINE", "URINE ROUTINE", "URINE EXAMINATION"):
+When a test appears in a URINE section (identified by section headers like "URINE", "URINE ROUTINE", "URINE EXAMINATION", "URINE ANALYSIS"):
 - "Protein" or "Proteins" → map to "Albumin/Proteins" (NOT to blood Serum Protein)
 - "Sugar" or "Glucose" → map to "Urine Sugar" (NOT to blood RBS/FBS)
 - "Albumin" → map to "Albumin/Proteins" (NOT to blood Serum Albumin)
@@ -422,6 +467,7 @@ Before returning JSON:
 4. Ranges are numeric only (no units embedded)
 5. Every test has status = "matched" or "unmatched"
 6. Matched tests have standard_name set, unmatched have standard_name = null
+7. For any test, the value should not be empty string or null. Should be approripately taken from the report.
 </validation>
 
 <example>

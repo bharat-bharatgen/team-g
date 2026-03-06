@@ -6,8 +6,7 @@ Used when split processing is enabled for better accuracy.
 from app.services.llm.config import LLMCallConfig
 
 CONFIG = LLMCallConfig(
-    base_url="https://apps.bharatgen.dev/inference/v1/chat/completions",
-    model="qwen3-vl-32b",
+    model="qwen3.5-27b",
     temperature=0.0,
     response_format="json_object",
     top_p=1,
@@ -47,7 +46,13 @@ Blood Pressure (3 readings table):
 │ Diastolic(mmHg) │ [value]    │ [value]    │ [value]    │
 └─────────────────┴────────────┴────────────┴────────────┘
 
-Pulse: [value] / Minute, Type: Regular [ ] Irregular [ ]
+Pulse (3 readings, same as BP):
+┌─────────────────┬────────────┬────────────┬────────────┐
+│                 │ Reading 1  │ Reading 2  │ Reading 3  │
+├─────────────────┼────────────┼────────────┼────────────┤
+│ Pulse / Minute  │ [value]    │ [value]    │ [value]    │
+└─────────────────┴────────────┴────────────┴────────────┘
+Type: Regular [ ] Irregular [ ]
 </section_layout>
 
 <output_schema>
@@ -76,8 +81,12 @@ Pulse: [value] / Minute, Type: Regular [ ] Irregular [ ]
       "reading_2": {"value": "<string | null>", "confidence": <float 0-1>},
       "reading_3": {"value": "<string | null>", "confidence": <float 0-1>}
     },
-    "pulse_per_minute": {"value": "<string | null>", "confidence": <float 0-1>},
-    "pulse_type": {"value": "<Regular | Irregular | null>", "confidence": <float 0-1|}
+    "pulse_per_minute": {
+      "reading_1": {"value": "<string | null>", "confidence": <float 0-1>},
+      "reading_2": {"value": "<string | null>", "confidence": <float 0-1>},
+      "reading_3": {"value": "<string | null>", "confidence": <float 0-1>}
+    },
+    "pulse_type": {"value": "<Regular | Irregular | null>", "confidence": <float 0-1>}
   }
 }
 </output_schema>
@@ -94,7 +103,7 @@ Blood Pressure:
 - Extract all 3 readings for both systolic and diastolic
 - Values typically: Systolic 90-180, Diastolic 60-120
 - Read carefully - don't mix up systolic and diastolic rows
-- Pulse: Extract rate per minute (typically 60-100)
+- Pulse: Extract all 3 readings per minute (typically 60-100)
 - Pulse type: Regular or Irregular
 
 Common misreadings:

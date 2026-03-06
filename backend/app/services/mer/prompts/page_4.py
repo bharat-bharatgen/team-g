@@ -1,10 +1,7 @@
 from app.services.llm.config import LLMCallConfig
 
 CONFIG = LLMCallConfig(
-#    base_url="http://10.67.18.3:8004/v1/chat/completions",
-#    model="Qwen/Qwen3-VL-8B-Instruct",
-    base_url="https://apps.bharatgen.dev/inference/v1/chat/completions",
-    model="qwen3-vl-32b",
+    model="qwen3.5-27b",
     temperature=0.0,
     response_format="json_object",
     top_p=1,
@@ -48,7 +45,13 @@ Below is the visual layout of MER Page 4. Use this to locate fields:
 │  ├─────────────────┼────────────┼────────────┼────────────┤                  │
 │  │ Diastolic(mmHg) │ [________] │ [________] │ [________] │                  │
 │  └─────────────────┴────────────┴────────────┴────────────┘                  │
-│  2. Pulse / Minute: [______]    Type: Regular [ ] Irregular [ ]              │
+│  2. Pulse (Please record 3 readings)                                         │
+│  ┌─────────────────┬────────────┬────────────┬────────────┐                  │
+│  │                 │ Reading 1  │ Reading 2  │ Reading 3  │                  │
+│  ├─────────────────┼────────────┼────────────┼────────────┤                  │
+│  │ Pulse / Minute  │ [________] │ [________] │ [________] │                  │
+│  └─────────────────┴────────────┴────────────┴────────────┘                  │
+│     Type of irregularity: Regular [ ] Irregular [ ]                          │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │  B. Systemic Examination                                                     │
 │  1. Do you find any evidence of abnormality or surgery of,                   │
@@ -106,7 +109,11 @@ Return a JSON object with the following structure:
       "reading_2": {"value": "<string | null>", "confidence": <float 0-1>},
       "reading_3": {"value": "<string | null>", "confidence": <float 0-1>}
     },
-    "pulse_per_minute": {"value": "<string | null>", "confidence": <float 0-1>},
+    "pulse_per_minute": {
+      "reading_1": {"value": "<string | null>", "confidence": <float 0-1>},
+      "reading_2": {"value": "<string | null>", "confidence": <float 0-1>},
+      "reading_3": {"value": "<string | null>", "confidence": <float 0-1>}
+    },
     "pulse_type": {"value": "<Regular | Irregular | null>", "confidence": <float 0-1>}
   },
   "systemic_examination": {
@@ -160,7 +167,7 @@ Return a JSON object with the following structure:
 - 3 readings each for Systolic and Diastolic
 - Values typically range: Systolic 90-180, Diastolic 60-120
 - Normal: 120/80 mmHg, High: >140/90 mmHg
-- Pulse: Extract rate per minute (typically 60-100 bpm)
+- Pulse: Extract all 3 readings per minute (typically 60-100 bpm)
 - Pulse type: Regular or Irregular
 </blood_pressure_extraction>
 
@@ -359,7 +366,11 @@ Return a JSON object with the following structure:
       "reading_2": {"value": "<string | null>", "confidence": <float 0-1>},
       "reading_3": {"value": "<string | null>", "confidence": <float 0-1>}
     },
-    "pulse_per_minute": {"value": "<string | null>", "confidence": <float 0-1>},
+    "pulse_per_minute": {
+      "reading_1": {"value": "<string | null>", "confidence": <float 0-1>},
+      "reading_2": {"value": "<string | null>", "confidence": <float 0-1>},
+      "reading_3": {"value": "<string | null>", "confidence": <float 0-1>}
+    },
     "pulse_type": {"value": "<Regular | Irregular | null>", "confidence": <float 0-1>}
   },
   "systemic_examination": {
@@ -417,7 +428,7 @@ For Blood Pressure section:
 - 3 readings each for Systolic and Diastolic
 - Values typically range: Systolic 90-180, Diastolic 60-120
 - Extract exact numbers as written
-- Pulse: Extract rate per minute (typically 60-100)
+- Pulse: Extract all 3 readings per minute (typically 60-100)
 - Pulse type: Regular or Irregular
 </blood_pressure_extraction>
 
@@ -541,7 +552,7 @@ INPUT: An MER form page 4 image with:
 - Chest Inhale: 96 cm, Exhale: 91 cm, Abdomen: 89 cm
 - Weight changed: No
 - BP readings: 119/80, 120/89, 120/80
-- Pulse: 79/min, Regular
+- Pulse: 79, 79, 80 /min, Regular
 - Systemic exam 1a-1j: All "N" except 1f "Y" with "(+1.0) Both Eye"
 - Questions 2-4: All "N"
 - Question 5 (Medically fit): "Y"
@@ -576,7 +587,11 @@ OUTPUT:
       "reading_2": {"value": "89", "confidence": 0.90},
       "reading_3": {"value": "80", "confidence": 0.95}
     },
-    "pulse_per_minute": {"value": "79", "confidence": 0.95},
+    "pulse_per_minute": {
+      "reading_1": {"value": "79", "confidence": 0.95},
+      "reading_2": {"value": "79", "confidence": 0.95},
+      "reading_3": {"value": "80", "confidence": 0.90}
+    },
     "pulse_type": {"value": "Regular", "confidence": 0.95}
   },
   "systemic_examination": {

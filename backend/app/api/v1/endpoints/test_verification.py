@@ -11,7 +11,7 @@ from app.core.security import get_current_user
 from app.dependencies import get_database
 from app.services.test_verification.processor import (
     get_latest_result,
-    run_verification_standalone,
+    complete_verification,
 )
 from app.api.v1.schemas.test_verification import (
     TestVerificationResultResponse,
@@ -50,7 +50,7 @@ async def trigger_test_verification(case_id: str, user: dict = Depends(get_curre
     await _get_case_or_404(case_id, user["id"])
     
     try:
-        result = await run_verification_standalone(case_id)
+        result = await complete_verification(case_id)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

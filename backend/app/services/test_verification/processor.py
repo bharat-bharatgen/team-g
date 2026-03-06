@@ -6,10 +6,15 @@ Verifies that required tests (from insurance requirements page) are present in p
 
 import json
 import asyncio
+import logging
+import time
 from typing import Any, Dict, List, Optional
 from rapidfuzz import fuzz
 
+logger = logging.getLogger(__name__)
+
 from app.services.llm import client as llm_client
+from app.services.llm.context import current_case_id, current_task, current_call_count
 from app.services.test_verification.config import (
     PAGE_5_IDENTIFIERS,
     normalize_category,
@@ -235,33 +240,36 @@ async def get_pathology_result(case_id: str) -> Optional[dict]:
 
 # ─── Main pipeline ──────────────────────────────────────────────────────────
 
-async def verify_tests_for_case(
+async def extract_requirements_for_case(
     case_id: str,
     mer_pages: List[dict],
 ) -> dict:
     """
-    Run test verification for a case.
-    
-    This is called after MER processing to check if Page 5 exists.
-    If found, extracts requirements and compares against pathology results.
-    
+    Phase 1: Extract requirements from Page 5 during MER processing.
+
+    Finds Page 5, runs LLM extraction, and stores the result with
+    status="pending_verification". The actual comparison against
+    pathology results happens later in ``complete_verification``.
+
     Args:
         case_id: The case ID
         mer_pages: List of OCR'd pages from MER processing
-        
+
     Returns:
-        Test verification result dict
+        Stored result dict (status will be "pending_verification",
+        "requirements_page_not_found", or "extraction_failed")
     """
-    # Update pipeline status to processing
+    current_case_id.set(case_id)
+    current_task.set("test_verification")
+    call_counter = [0]
+    current_call_count.set(call_counter)
+
     await _update_pipeline_status(case_id, "processing")
-    
+
     try:
-        # Step 1: Find requirements page (Page 5)
         requirements_page = find_requirements_page(mer_pages)
-        
         version = await _get_next_version(case_id)
-        
-        # Page 5 not found
+
         if not requirements_page:
             result = TestVerificationResultModel(
                 case_id=case_id,
@@ -271,14 +279,16 @@ async def verify_tests_for_case(
             )
             doc_id = await _store_result(result)
             await _update_pipeline_status(case_id, "extracted")
-            return {
-                "_id": doc_id,
-                **result.model_dump(),
-            }
-        
-        # Step 2: Extract requirements using LLM
+            return {"_id": doc_id, **result.model_dump()}
+
+        t_llm = time.monotonic()
         extracted = await extract_requirements(requirements_page["image_bytes"])
-        
+        llm_wall = time.monotonic() - t_llm
+        logger.info(
+            "LLM_PIPELINE,case_id=%s,task=test_verification,total_calls=%s,llm_wall_s=%.2f,calls_per_sec=%.2f",
+            case_id, call_counter[0], llm_wall, call_counter[0] / llm_wall if llm_wall > 0 else 0,
+        )
+
         if "error" in extracted:
             result = TestVerificationResultModel(
                 case_id=case_id,
@@ -293,30 +303,9 @@ async def verify_tests_for_case(
                 **result.model_dump(),
                 "extraction_error": extracted.get("error"),
             }
-        
-        # Step 3: Get pathology result
-        pathology_result = await get_pathology_result(case_id)
-        pathology_tests = get_pathology_test_names(pathology_result) if pathology_result else set()
-        
-        # Step 4: Get MER result
-        mer_result = await get_mer_result(case_id)
-        mer_exists = mer_result is not None
-        
-        # Step 5: Parse and verify requirements
+
         raw_requirements = extracted.get("parsed_requirements", [])
-        required_tests, missing_tests = verify_tests(
-            raw_requirements,
-            pathology_tests,
-            mer_exists,
-        )
-        
-        # Step 6: Build result
-        total_required = len(required_tests)
-        total_found = sum(1 for t in required_tests if t.found)
-        total_missing = total_required - total_found
-        
-        status = "complete" if total_missing == 0 else "missing_tests"
-        
+
         result = TestVerificationResultModel(
             case_id=case_id,
             version=version,
@@ -327,6 +316,89 @@ async def verify_tests_for_case(
             hi_test_remark=extracted.get("hi_test_remark"),
             extraction_confidence=extracted.get("confidence", 0.0),
             raw_requirements=raw_requirements,
+            status="pending_verification",
+        )
+        doc_id = await _store_result(result)
+        # Stay in "processing" — verification will finish later
+        await _update_pipeline_status(case_id, "pending_verification")
+        return {"_id": doc_id, **result.model_dump()}
+
+    except Exception as e:
+        await _update_pipeline_status(case_id, "failed")
+        raise
+
+
+async def complete_verification(case_id: str) -> dict:
+    """
+    Phase 2: Compare extracted requirements against pathology results.
+
+    Called by the orchestrator once both MER and pathology have completed.
+    Reads the previously stored extraction result and runs the comparison.
+
+    Args:
+        case_id: The case ID
+
+    Returns:
+        Updated verification result dict
+    """
+    current_case_id.set(case_id)
+    current_task.set("test_verification")
+
+    await _update_pipeline_status(case_id, "processing")
+
+    try:
+        # Get the stored extraction result
+        prev = await get_latest_result(case_id)
+
+        if not prev:
+            # No extraction was stored (MER had no unmatched pages)
+            await _update_pipeline_status(case_id, "extracted")
+            return {"case_id": case_id, "status": "no_extraction_found"}
+
+        # If extraction already failed or page wasn't found, nothing to do
+        if prev.get("status") in ("requirements_page_not_found", "extraction_failed"):
+            await _update_pipeline_status(case_id, "extracted")
+            return prev
+
+        # If already verified (not pending), skip
+        if prev.get("status") not in ("pending_verification",):
+            await _update_pipeline_status(case_id, "extracted")
+            return prev
+
+        raw_requirements = prev.get("raw_requirements", [])
+
+        # Get pathology result (should exist now)
+        pathology_result = await get_pathology_result(case_id)
+        pathology_tests = get_pathology_test_names(pathology_result) if pathology_result else set()
+
+        # Get MER result
+        mer_result = await get_mer_result(case_id)
+        mer_exists = mer_result is not None
+
+        # Run comparison
+        required_tests, missing_tests = verify_tests(
+            raw_requirements,
+            pathology_tests,
+            mer_exists,
+        )
+
+        total_required = len(required_tests)
+        total_found = sum(1 for t in required_tests if t.found)
+        total_missing = total_required - total_found
+        status = "complete" if total_missing == 0 else "missing_tests"
+
+        version = await _get_next_version(case_id)
+
+        result = TestVerificationResultModel(
+            case_id=case_id,
+            version=version,
+            page_found=prev.get("page_found", True),
+            proposal_number=prev.get("proposal_number"),
+            life_assured_name=prev.get("life_assured_name"),
+            ins_test_remark=prev.get("ins_test_remark"),
+            hi_test_remark=prev.get("hi_test_remark"),
+            extraction_confidence=prev.get("extraction_confidence", 0.0),
+            raw_requirements=raw_requirements,
             required_tests=required_tests,
             total_required=total_required,
             total_found=total_found,
@@ -336,14 +408,12 @@ async def verify_tests_for_case(
             mer_result_version=mer_result.get("version") if mer_result else None,
             pathology_result_version=pathology_result.get("version") if pathology_result else None,
         )
-        
+
         doc_id = await _store_result(result)
         await _update_pipeline_status(case_id, "extracted")
-        
-        return {
-            "_id": doc_id,
-            **result.model_dump(),
-        }
+
+        return {"_id": doc_id, **result.model_dump()}
+
     except Exception as e:
         await _update_pipeline_status(case_id, "failed")
         raise
@@ -362,6 +432,9 @@ async def run_verification_standalone(case_id: str) -> dict:
     Returns:
         Test verification result dict
     """
+    current_case_id.set(case_id)
+    current_task.set("test_verification")
+
     # Update pipeline status to processing
     await _update_pipeline_status(case_id, "processing")
     

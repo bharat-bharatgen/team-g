@@ -43,18 +43,19 @@ THIN_BORDER = Border(
 
 # Columns that appear in the Excel (id is hidden)
 # Added "Standard Range" column for config range
-COLUMNS = ["Parameter", "Value", "Unit", "Report Range", "Standard Range", "Status", "Method", "Is Standard", "Source"]
+COLUMNS = ["Parameter", "Original Name", "Value", "Unit", "Report Range", "Standard Range", "Status", "Method", "Is Standard", "Source"]
 
 # Column indices (1-based, after hidden column A)
 COL_PARAMETER = 2
-COL_VALUE = 3
-COL_UNIT = 4
-COL_REPORT_RANGE = 5
-COL_STANDARD_RANGE = 6
-COL_STATUS = 7
-COL_METHOD = 8
-COL_IS_STANDARD = 9
-COL_SOURCE = 10
+COL_ORIGINAL_NAME = 3
+COL_VALUE = 4
+COL_UNIT = 5
+COL_REPORT_RANGE = 6
+COL_STANDARD_RANGE = 7
+COL_STATUS = 8
+COL_METHOD = 9
+COL_IS_STANDARD = 10
+COL_SOURCE = 11
 
 
 def _get_fill(field: PathologyField) -> PatternFill:
@@ -70,6 +71,7 @@ def _field_to_row(field: PathologyField) -> list:
     """Convert a PathologyField to an Excel row (without internal id)."""
     return [
         field.key,
+        field.reference_name or "",
         field.value or "",
         field.unit or "",
         field.reference_range or "",
@@ -137,14 +139,15 @@ def generate_excel(fields: List[PathologyField], case_id: str, version: int) -> 
     # ── Auto-fit column widths (approximate) ─────────────────────
     col_widths = {
         "B": 25,   # Parameter
-        "C": 15,   # Value
-        "D": 12,   # Unit
-        "E": 18,   # Report Range
-        "F": 18,   # Standard Range
-        "G": 10,   # Status
-        "H": 20,   # Method
-        "I": 12,   # Is Standard
-        "J": 10,   # Source
+        "C": 25,   # Original Name
+        "D": 15,   # Value
+        "E": 12,   # Unit
+        "F": 18,   # Report Range
+        "G": 18,   # Standard Range
+        "H": 10,   # Status
+        "I": 20,   # Method
+        "J": 12,   # Is Standard
+        "K": 10,   # Source
     }
     for col_letter, width in col_widths.items():
         ws.column_dimensions[col_letter].width = width

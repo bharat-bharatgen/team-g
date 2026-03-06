@@ -2,12 +2,14 @@ import json
 import asyncio
 import importlib
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 from app.services.storage import s3_service
 from app.services.common.tesseract_ocr import extract_from_file
 from app.services.mer.page_classifier import classify_pages
 from app.services.llm import client as llm_client
+from app.services.llm.context import current_case_id, current_task, current_call_count
 from app.services.mer.flattener import flatten_all_pages
 from app.models.mer_result import MERResultModel
 from app.dependencies import get_database
@@ -91,6 +93,17 @@ async def _llm_extract_page(mer_page_num: int, match_info: dict) -> Optional[dic
     if mer_page_num == 1:
         from app.services.mer.page_1_processor import extract_page_1
         parsed = await extract_page_1(page["image_bytes"])
+        return {
+            "mer_page_num": mer_page_num,
+            "extracted_data": parsed,
+            "confidence": match_info["confidence"],
+            "source_page": page["page_number"],
+        }
+
+    # Special handling for Page 2 - use split processor for alcohol table accuracy
+    if mer_page_num == 2:
+        from app.services.mer.page_2_processor import extract_page_2
+        parsed = await extract_page_2(page["image_bytes"])
         return {
             "mer_page_num": mer_page_num,
             "extracted_data": parsed,
@@ -244,6 +257,11 @@ async def process_mer(case_id: str, file_entries: List[dict]) -> dict:
     Returns:
         Complete result dict including DB id and version.
     """
+    current_case_id.set(case_id)
+    current_task.set("mer")
+    call_counter = [0]
+    current_call_count.set(call_counter)
+
     # ── Step 1: Download all files in parallel
     downloaded = await _download_all(file_entries)
 
@@ -254,7 +272,17 @@ async def process_mer(case_id: str, file_entries: List[dict]) -> dict:
     classification = await classify_pages(all_pages)
 
     # ── Step 4: LLM extraction in parallel
+    t_llm = time.monotonic()
     extracted = await _llm_extract_all(classification)
+    llm_wall = time.monotonic() - t_llm
+
+    total_calls = call_counter[0]
+    cps = total_calls / llm_wall if llm_wall > 0 else 0
+    logger.info(
+        "LLM_PIPELINE,case_id=%s,task=mer,matched_pages=%s,total_calls=%s,"
+        "llm_wall_s=%.2f,calls_per_sec=%.2f",
+        case_id, len(classification["mapping"]), total_calls, llm_wall, cps,
+    )
 
     # ── Step 5: Build pages dict and flatten
     pages = {}
@@ -291,15 +319,16 @@ async def process_mer(case_id: str, file_entries: List[dict]) -> dict:
 
     doc_id = await _store_result(result)
 
-    # ── Step 7: Run test verification if there are unmatched pages (Page 5 might be there)
-    test_verification_result = None
+    # ── Step 7: Extract requirements from Page 5 (if unmatched pages exist)
+    # Actual verification against pathology happens later via orchestrator
+    test_extraction_result = None
     if classification["unmatched_pages"]:
         try:
-            from app.services.test_verification.processor import verify_tests_for_case
-            test_verification_result = await verify_tests_for_case(case_id, all_pages)
-            logger.info(f"Test verification completed for case {case_id}: {test_verification_result.get('status')}")
+            from app.services.test_verification.processor import extract_requirements_for_case
+            test_extraction_result = await extract_requirements_for_case(case_id, all_pages)
+            logger.info(f"Test requirements extracted for case {case_id}: {test_extraction_result.get('status')}")
         except Exception as e:
-            logger.warning(f"Test verification failed for case {case_id}: {e}")
+            logger.warning(f"Test requirements extraction failed for case {case_id}: {e}")
 
     return {
         "_id": doc_id,
@@ -309,5 +338,5 @@ async def process_mer(case_id: str, file_entries: List[dict]) -> dict:
         "extracted": extracted,
         "fields_count": len(fields),
         "classification": result.classification,
-        "test_verification": test_verification_result,
+        "test_verification": test_extraction_result,
     }

@@ -1,10 +1,7 @@
 from app.services.llm.config import LLMCallConfig
 
 CONFIG = LLMCallConfig(
-#    base_url="http://10.67.18.3:8004/v1/chat/completions",
-#    model="Qwen/Qwen3-VL-8B-Instruct",
-    base_url="https://apps.bharatgen.dev/inference/v1/chat/completions",
-    model="qwen3-vl-32b",
+    model="qwen3.5-27b",
     temperature=0.0,
     response_format="json_object",
     top_p=1,
@@ -90,6 +87,12 @@ KEY LOCATIONS:
 - Questions 4-9: Y/N with detailed sub-questions if Yes
 - Question 10: Alcohol table with Type, Quantity, Duration columns
 </form_layout>
+
+<Alcohol_table>
+Some people fill alcohol table with N or No sometimes. This means they don't consume alcohol.
+If you see any text in alcohol table, analyze it properly and extract the information.
+Don't generate the content of the alcohol table. Only extract the information as it is.
+</Alcohol_table>
 
 <output_schema>
 Return a JSON object with the following structure:

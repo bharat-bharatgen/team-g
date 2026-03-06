@@ -11,11 +11,16 @@ Flags if any pairwise distance exceeds threshold.
 
 import json
 import asyncio
+import logging
+import time
 from typing import Any, Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 from app.services.storage import s3_service
 from app.services.common.tesseract_ocr import normalize_to_image
 from app.services.llm import client as llm_client
+from app.services.llm.context import current_case_id, current_task, current_call_count
 from app.services.location_check.prompts import photo_geo as photo_prompt
 from app.services.location_check.prompts import id_address as id_prompt
 from app.services.location_check.lab_address import get_lab_address
@@ -367,6 +372,12 @@ async def process_location_check(
     Returns:
         Result summary dict.
     """
+    current_case_id.set(case_id)
+    current_task.set("location_check")
+    call_counter = [0]
+    current_call_count.set(call_counter)
+    t_llm = time.monotonic()
+
     sources = []
     photo_file_id = None
     id_file_id = None
@@ -423,6 +434,13 @@ async def process_location_check(
     # ── 3. Lab address extraction
     lab_source, pathology_version = await _extract_lab_address(case_id)
     sources.append(lab_source)
+
+    llm_wall = time.monotonic() - t_llm
+    total_calls = call_counter[0]
+    logger.info(
+        "LLM_PIPELINE,case_id=%s,task=location_check,total_calls=%s,llm_wall_s=%.2f,calls_per_sec=%.2f",
+        case_id, total_calls, llm_wall, total_calls / llm_wall if llm_wall > 0 else 0,
+    )
 
     # ── 4. Calculate distances
     distances = _calculate_distances(sources)

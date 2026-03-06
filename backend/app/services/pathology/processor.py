@@ -2,20 +2,26 @@
 Pathology processing pipeline.
 
 Step 1: Download files → convert PDF to images
-Step 2: LLM vision OCR per page (parallel) → raw text per page
-Step 3: LLM extraction per page (parallel) → tests array per page
-Step 4: Merge extracted data (attach source_page to each test)
-Step 5: Flatten to PathologyField list
-Step 6: Store versioned snapshot in MongoDB
+Step 2: Per-page interleaved processing (all pages concurrent):
+        OCR (qwen3.5-27b) → Extract (gpt-oss-120b) chained per page
+        This keeps the OCR GPU busy while extraction runs on another GPU.
+Step 3: Merge extracted data (attach source_page to each test)
+Step 4: Flatten to PathologyField list
+Step 5: Store versioned snapshot in MongoDB
 """
 
 import json
 import asyncio
+import logging
+import time
 from typing import Any, Dict, List, Optional
 
 from app.services.storage import s3_service
 from app.services.common.tesseract_ocr import pdf_to_page_images
 from app.services.llm import client as llm_client
+from app.services.llm.context import current_case_id, current_task, current_call_count
+
+logger = logging.getLogger(__name__)
 from app.services.pathology.prompts import ocr as ocr_prompt
 from app.services.pathology.prompts import extract as extract_prompt
 from app.services.pathology.flattener import flatten_standardized
@@ -150,6 +156,27 @@ async def _extract_all_pages(pages_data: Dict[str, str]) -> List[Dict[str, Any]]
     return list(results)
 
 
+# ─── Interleaved OCR → Extract per page ──────────────────────────────────────
+
+async def _ocr_and_extract_page(page: dict) -> tuple[dict, Dict[str, Any]]:
+    """Chain OCR then extraction for a single page.
+
+    By running all pages through this function concurrently, the OCR GPU
+    stays busy with later pages while the extraction model processes
+    earlier pages that have already finished OCR.
+
+    Returns:
+        (ocr_result, extract_result) tuple where
+        ocr_result  = {"page_number": int, "text": str}
+        extract_result = {"page_number": int, "result": parsed_json}
+    """
+    ocr_result = await _ocr_page(page)
+    extract_result = await _extract_page(
+        ocr_result["page_number"], ocr_result["text"]
+    )
+    return ocr_result, extract_result
+
+
 def _merge_extracted_data(page_results: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
     Merge extracted data from all pages and attach source_page to each test.
@@ -240,15 +267,17 @@ async def list_result_versions(case_id: str) -> List[dict]:
 
 async def process_pathology(case_id: str, file_entries: List[dict]) -> dict:
     """
-    Full pathology processing pipeline:
+    Full pathology processing pipeline with interleaved GPU utilization:
 
     1. Download all files from S3              (parallel)
     2. Convert to page images
-    3. LLM vision OCR per page                 (parallel)
-    4. LLM extraction per page                 (parallel)
-    5. Merge extracted data (attach source_page)
-    6. Flatten to PathologyFields
-    7. Store versioned snapshot in MongoDB
+    3. Per-page interleaved processing         (all pages concurrent)
+       Each page: OCR (qwen3.5-27b) → Extract (gpt-oss-120b)
+       Pages run concurrently so OCR GPU stays busy while extraction
+       processes pages that already finished OCR.
+    4. Merge extracted data (attach source_page)
+    5. Flatten to PathologyFields
+    6. Store versioned snapshot in MongoDB
 
     Args:
         case_id: The case ID.
@@ -257,25 +286,45 @@ async def process_pathology(case_id: str, file_entries: List[dict]) -> dict:
     Returns:
         Result summary dict.
     """
+    current_case_id.set(case_id)
+    current_task.set("pathology")
+    call_counter = [0]
+    current_call_count.set(call_counter)
+
     # ── Step 1: Download all files in parallel
     downloaded = await _download_all(file_entries)
 
     # ── Step 2: Convert to page images (synchronous - PyMuPDF not thread-safe)
     page_images = _files_to_page_images(downloaded)
 
-    # ── Step 3: LLM vision OCR per page (parallel)
-    pages_data = await _ocr_all_pages(page_images)
+    # ── Step 3: Interleaved OCR → Extract per page (all pages concurrent)
+    t_llm = time.monotonic()
+    paired_results = await asyncio.gather(
+        *[_ocr_and_extract_page(p) for p in page_images]
+    )
+    llm_wall = time.monotonic() - t_llm
 
-    # ── Step 4: LLM extraction per page (parallel)
-    page_results = await _extract_all_pages(pages_data)
+    pages_data: Dict[str, str] = {}
+    page_results: List[Dict[str, Any]] = []
+    for ocr_res, ext_res in paired_results:
+        pages_data[str(ocr_res["page_number"])] = ocr_res["text"]
+        page_results.append(ext_res)
 
-    # ── Step 5: Merge extracted data (attach source_page to each test)
+    total_calls = call_counter[0]
+    cps = total_calls / llm_wall if llm_wall > 0 else 0
+    logger.info(
+        "LLM_PIPELINE,case_id=%s,task=pathology,pages=%s,"
+        "total_calls=%s,llm_wall_s=%.2f,calls_per_sec=%.2f",
+        case_id, len(page_images), total_calls, llm_wall, cps,
+    )
+
+    # ── Step 4: Merge extracted data (attach source_page to each test)
     standardized = _merge_extracted_data(page_results)
 
-    # ── Step 6: Flatten
+    # ── Step 5: Flatten
     fields = flatten_standardized(standardized)
 
-    # ── Step 7: Store
+    # ── Step 6: Store
     version = await _get_next_version(case_id)
 
     result = PathologyResultModel(
@@ -292,7 +341,6 @@ async def process_pathology(case_id: str, file_entries: List[dict]) -> dict:
 
     doc_id = await _store_result(result)
 
-    # Count how many standard params have values
     filled_count = sum(
         1 for f in fields
         if f.is_standard and f.value is not None

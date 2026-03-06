@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Any
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from bson import ObjectId
 from app.api.v1.schemas.case import (
     CaseCreate,
@@ -20,7 +20,8 @@ from app.api.v1.schemas.case import (
 from app.models.case import CaseModel, CaseDecision
 from app.core.security import get_current_user
 from app.dependencies import get_database
-from app.services.orchestrator import process_all_background, get_pipelines_to_trigger
+from app.services.orchestrator import get_pipelines_to_trigger
+from app.services.task_queue import enqueue_task
 
 router = APIRouter()
 
@@ -395,38 +396,39 @@ async def get_case_status(case_id: str, user: dict = Depends(get_current_user)):
 @router.post("/{case_id}/process-all", response_model=ProcessAllResponse)
 async def trigger_process_all(
     case_id: str,
-    background_tasks: BackgroundTasks,
     user: dict = Depends(get_current_user),
 ):
     """
-    Trigger all applicable processing pipelines for a case in background.
+    Trigger all applicable processing pipelines for a case.
 
     Returns immediately with what pipelines will be triggered.
-    Processing happens asynchronously — poll GET /cases/{id} for status updates.
-
-    Pipelines triggered based on uploaded documents:
-    - MER extraction (if MER docs uploaded)
-    - Pathology extraction (if pathology docs uploaded)
-    - Face matching (if both photo and ID proof uploaded)
-    - Location check (if geotagged photos uploaded)
+    A background worker picks up and processes each task.
+    Poll GET /cases/{id}/status for progress.
     """
     db = await get_database()
     case = await db.cases.find_one({"_id": ObjectId(case_id), "user_id": user["id"]})
     if not case:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
 
-    # Determine what will be triggered (quick, no processing)
     triggered, skipped = await get_pipelines_to_trigger(case_id, case)
 
     if triggered:
-        # Kick off background processing
-        background_tasks.add_task(process_all_background, case_id, case)
+        now = datetime.utcnow()
+        status_updates = {
+            f"pipeline_status.{p}": "processing" for p in triggered
+        }
+        status_updates["updated_at"] = now
+        await db.cases.update_one(
+            {"_id": ObjectId(case_id)}, {"$set": status_updates}
+        )
+        for pipeline in triggered:
+            await enqueue_task(case_id, pipeline)
 
     return ProcessAllResponse(
         case_id=case_id,
         pipelines_triggered=triggered,
         pipelines_skipped=skipped,
-        results={},  # Results come via polling, not in this response
+        results={},
     )
 
 

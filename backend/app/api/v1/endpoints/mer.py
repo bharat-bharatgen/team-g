@@ -6,24 +6,21 @@ import io
 from app.core.security import get_current_user
 from app.dependencies import get_database
 from app.services.mer.processor import (
-    process_mer,
     get_latest_result,
     get_result_by_version,
     list_result_versions,
 )
+from app.services.task_queue import enqueue_task
 from app.services.mer.excel_export import generate_excel
 from app.services.mer.excel_import import import_excel
 from app.models.mer_result import MERResultModel, MERField
 from app.api.v1.schemas.mer import (
-    MERProcessResponse,
     MERResultResponse,
     MERFieldResponse,
     MERVersionsResponse,
     MERVersionEntry,
     MERImportResponse,
-    ClassificationSummary,
     PatientInfoResponse,
-    TestVerificationSummary,
     MERSummaryResponse,
 )
 
@@ -55,17 +52,15 @@ def _get_mer_files(case: dict) -> list[dict]:
 
 # ─── POST /cases/{case_id}/mer/process ───────────────────────────────────────
 
-@router.post("/{case_id}/mer/process", response_model=MERProcessResponse)
+@router.post("/{case_id}/mer/process")
 async def trigger_mer_processing(case_id: str, user: dict = Depends(get_current_user)):
     """
-    Kick off the full MER processing pipeline:
-    Download → OCR → Classify → LLM Extract → Flatten → Store
+    Queue MER processing for background execution.
 
-    Returns processing result summary.
+    Returns immediately. Poll GET /cases/{id}/status for progress.
     """
     case = await _get_case_or_404(case_id, user["id"])
 
-    # Guard against double-triggering
     mer_status = case.get("pipeline_status", {}).get("mer", "not_started")
     if mer_status == "processing":
         raise HTTPException(
@@ -73,55 +68,16 @@ async def trigger_mer_processing(case_id: str, user: dict = Depends(get_current_
             detail="MER processing is already in progress.",
         )
 
-    mer_files = _get_mer_files(case)
+    _get_mer_files(case)
 
-    # Update pipeline status to processing
     db = await get_database()
     await db.cases.update_one(
         {"_id": ObjectId(case_id)},
         {"$set": {"pipeline_status.mer": "processing"}},
     )
+    await enqueue_task(case_id, "mer")
 
-    try:
-        result = await process_mer(case_id, mer_files)
-    except Exception as e:
-        # Mark MER pipeline as failed
-        await db.cases.update_one(
-            {"_id": ObjectId(case_id)},
-            {"$set": {"pipeline_status.mer": "failed"}},
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"MER processing failed: {str(e)}",
-        )
-
-    # Update MER pipeline status
-    await db.cases.update_one(
-        {"_id": ObjectId(case_id)},
-        {"$set": {"pipeline_status.mer": "extracted"}},
-    )
-
-    # Build test verification summary if available
-    test_verification = None
-    if result.get("test_verification"):
-        tv = result["test_verification"]
-        test_verification = TestVerificationSummary(
-            status=tv.get("status", "unknown"),
-            total_required=tv.get("total_required", 0),
-            total_found=tv.get("total_found", 0),
-            total_missing=tv.get("total_missing", 0),
-            missing_tests=tv.get("missing_tests", []),
-        )
-
-    return MERProcessResponse(
-        id=result["_id"],
-        case_id=result["case_id"],
-        version=result["version"],
-        source=result["source"],
-        fields_count=result["fields_count"],
-        classification=ClassificationSummary(**result["classification"]),
-        test_verification=test_verification,
-    )
+    return {"case_id": case_id, "status": "processing", "message": "MER processing queued."}
 
 
 # ─── GET /cases/{case_id}/mer/result ─────────────────────────────────────────
