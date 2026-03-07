@@ -241,6 +241,12 @@ export const CaseSummaryTab = ({
 
     // Special rendering for completed Risk Assessment
     if (key === 'risk' && isReady && riskData) {
+      const isV2 = !!(riskData.integrity_concerns || riskData.clinical_discoveries);
+      const integrityCount = riskData.integrity_concerns?.length ?? 0;
+      const discoveryCount = riskData.clinical_discoveries?.length ?? 0;
+      const redFlagCount = riskData.red_flags?.length ?? 0;
+      const contradictionCount = riskData.contradictions?.length ?? 0;
+
       return (
         <Card 
           key={key}
@@ -266,21 +272,42 @@ export const CaseSummaryTab = ({
           <CardContent className="pt-0">
             <div className="space-y-3">
               <p className="text-base leading-relaxed text-foreground font-semibold line-clamp-2">
-                {riskData.summary || 'Risk analysis completed.'}
+                {typeof riskData.summary === 'object' && riskData.summary !== null
+                  ? riskData.summary.conclusion
+                  : riskData.summary || 'Risk analysis completed.'}
               </p>
               
               <div className="flex items-center gap-4 pt-2">
-                {riskData.red_flags && riskData.red_flags.length > 0 && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <AlertTriangle className="h-4 w-4 text-red-500" />
-                    <span className="font-medium">{riskData.red_flags.length} Red Flag{riskData.red_flags.length !== 1 ? 's' : ''}</span>
-                  </div>
-                )}
-                {riskData.contradictions && riskData.contradictions.length > 0 && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <AlertCircle className="h-4 w-4 text-amber-500" />
-                    <span className="font-medium">{riskData.contradictions.length} Contradiction{riskData.contradictions.length !== 1 ? 's' : ''}</span>
-                  </div>
+                {isV2 ? (
+                  <>
+                    {integrityCount > 0 && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <AlertTriangle className="h-4 w-4 text-red-500" />
+                        <span className="font-medium">{integrityCount} Integrity Issue{integrityCount !== 1 ? 's' : ''}</span>
+                      </div>
+                    )}
+                    {discoveryCount > 0 && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <AlertCircle className="h-4 w-4 text-amber-500" />
+                        <span className="font-medium">{discoveryCount} Clinical Finding{discoveryCount !== 1 ? 's' : ''}</span>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {redFlagCount > 0 && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <AlertTriangle className="h-4 w-4 text-red-500" />
+                        <span className="font-medium">{redFlagCount} Red Flag{redFlagCount !== 1 ? 's' : ''}</span>
+                      </div>
+                    )}
+                    {contradictionCount > 0 && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <AlertCircle className="h-4 w-4 text-amber-500" />
+                        <span className="font-medium">{contradictionCount} Contradiction{contradictionCount !== 1 ? 's' : ''}</span>
+                      </div>
+                    )}
+                  </>
                 )}
                 <div className="ml-auto flex items-center gap-1 text-sm text-muted-foreground">
                   View Details <ArrowRight className="h-4 w-4" />

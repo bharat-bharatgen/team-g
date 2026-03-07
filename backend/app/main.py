@@ -40,15 +40,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-_cors_origins_str = os.environ.get(
-    "CORS_ORIGINS",
-    "http://localhost,http://localhost:5173,https://bharatgen-insurance-copilot.vercel.app",
-)
-cors_origins = [o.strip() for o in _cors_origins_str.split(",") if o.strip()]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
+    allow_origins=["http://localhost:5173","https://bharatgen-insurance-copilot.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

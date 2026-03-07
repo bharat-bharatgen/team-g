@@ -5,12 +5,11 @@ class Settings(BaseSettings):
     mongodb_url: str = "mongodb://localhost:27017"
     mongodb_db_name: str = "insurance_copilot"
      
-    # S3 / MinIO
+    # AWS S3
     aws_access_key_id: str
     aws_secret_access_key: str
     aws_region: str = "us-east-1"
     s3_bucket_name: str
-    s3_endpoint_url: str = ""  # Set for MinIO, e.g. "https://minio.bharatgen.dev"
     s3_upload_url_expiry: int = 900  # 15 minutes
     s3_download_url_expiry: int = 1800  # 30 minutes
     

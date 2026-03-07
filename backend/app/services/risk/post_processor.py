@@ -2,78 +2,75 @@
 Post-processing for risk analysis.
 
 Validates and enriches LLM response.
+Supports both old format (red_flags/contradictions) and new format
+(integrity_concerns/clinical_discoveries) for backward compatibility.
 """
 
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 
-def extract_all_sources_from_summary(summary: Dict) -> List[str]:
-    """Recursively extract all source citations from the summary."""
-    sources = []
+def _extract_all_refs(llm_response: Dict) -> List[str]:
+    """Extract all ref IDs cited in the LLM response (both old and new format)."""
+    refs: List[str] = []
 
-    def extract_recursive(obj):
+    def _collect(obj: Any):
         if isinstance(obj, dict):
             for key, value in obj.items():
-                if key in ["source", "sources", "supporting_evidence", "disclosure_source"]:
-                    if isinstance(value, str) and value:
-                        sources.append(value)
-                    elif isinstance(value, list):
-                        sources.extend([v for v in value if isinstance(v, str) and v])
-                    elif isinstance(value, dict):
-                        sources.extend(
-                            [v for v in value.values() if isinstance(v, str) and v]
-                        )
+                if key in ("ref", "mer_ref", "path_ref") and isinstance(value, str):
+                    refs.append(value)
+                elif key == "refs" and isinstance(value, list):
+                    refs.extend(v for v in value if isinstance(v, str))
                 else:
-                    extract_recursive(value)
+                    _collect(value)
         elif isinstance(obj, list):
             for item in obj:
-                extract_recursive(item)
+                _collect(item)
 
-    extract_recursive(summary)
-    return sources
+    _collect(llm_response)
+    return refs
 
 
-def validate_sources(
-    summary: Dict, mer_data: Optional[Dict], pathology_data: Optional[Dict]
+def validate_refs(
+    llm_response: Dict,
+    mer_data: Optional[Dict],
+    pathology_data: Optional[Dict],
 ) -> List[str]:
-    """Validate that cited sources actually exist in the input data."""
-    warnings = []
-    cited_sources = extract_all_sources_from_summary(summary)
+    """Validate that cited ref IDs correspond to real input data."""
+    warnings: List[str] = []
+    cited_refs = _extract_all_refs(llm_response)
 
-    # Build set of valid pathology test names
-    valid_pathology = set()
+    valid_path_names: set[str] = set()
     if pathology_data:
         for test in pathology_data.get("tests", []):
             if test.get("standard_name"):
-                valid_pathology.add(test["standard_name"])
-            if test.get("original_name"):
-                valid_pathology.add(test["original_name"])
+                valid_path_names.add(test["standard_name"])
 
-    for source in cited_sources:
-        if not source:
+    for ref in cited_refs:
+        if not ref:
             continue
-
-        # Check pathology sources
-        if source.startswith("pathology."):
-            test_name = source.replace("pathology.", "")
-            if test_name not in valid_pathology:
-                warnings.append(f"Unknown pathology test cited: {source}")
-
-        # Check MER sources (basic validation)
-        elif source.startswith("mer.") and mer_data:
-            parts = source.split(".")
+        if ref.startswith("PATH:"):
+            param = ref.split(":", 1)[1]
+            if param not in valid_path_names:
+                warnings.append(f"Unknown pathology ref: {ref}")
+        elif ref.startswith("MER:") and mer_data:
+            parts = ref.split(":")
             if len(parts) >= 2:
-                page_ref = parts[1]  # e.g., "page1"
-                page_key = page_ref.replace("page", "page_")  # "page_1"
-                if page_key not in mer_data and page_ref not in mer_data:
-                    warnings.append(f"Invalid MER page reference: {source}")
-
-        # Derived sources are always valid
-        elif source.startswith("derived."):
-            pass
+                page_key = f"page_{parts[1].replace('P', '')}"
+                if page_key not in mer_data:
+                    warnings.append(f"Invalid MER page ref: {ref}")
 
     return warnings
+
+
+def _derive_risk_level(risk_score: int) -> str:
+    """Derive risk_level from risk_score using fixed ranges."""
+    if risk_score <= 3:
+        return "Low"
+    elif risk_score <= 6:
+        return "Intermediate"
+    else:
+        return "High"
 
 
 def post_process_response(
@@ -84,17 +81,27 @@ def post_process_response(
 ) -> Dict:
     """
     Light-touch post-processing.
-    - Validate sources
+    - Derive risk_level from risk_score (never trust LLM for this)
+    - Validate ref citations
     - Add metadata
     - DO NOT override clinical judgment
     """
-    # Validate sources
-    source_warnings = validate_sources(llm_response, mer_data, pathology_data)
+    ref_warnings = validate_refs(llm_response, mer_data, pathology_data)
 
-    # Add metadata
+    is_new_format = "integrity_concerns" in llm_response
+
+    raw_score = llm_response.get("risk_score")
+    if isinstance(raw_score, (int, float)):
+        score = max(1, min(10, int(raw_score)))
+    else:
+        score = 1
+    llm_response["risk_score"] = score
+    llm_response["risk_level"] = _derive_risk_level(score)
+
     llm_response["_metadata"] = {
         "generated_at": datetime.utcnow().isoformat(),
-        "source_validation_warnings": source_warnings if source_warnings else None,
+        "format": "v2" if is_new_format else "v1",
+        "ref_validation_warnings": ref_warnings if ref_warnings else None,
         "model": model_name,
     }
 

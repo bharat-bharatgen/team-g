@@ -703,9 +703,14 @@ export const PathologyResultPage = () => {
                             }}
                           >
                             <td className="px-2 py-1.5 text-sm font-medium text-gray-900">
-                              {field.key || field.parameter_name || field.field_name || field.name || 'Unknown'}
-                              {!field.is_standard && (
-                                <span className="ml-1 text-xs text-gray-400">*</span>
+                              <div>
+                                {field.key || field.parameter_name || field.field_name || field.name || 'Unknown'}
+                                {!field.is_standard && (
+                                  <span className="ml-1 text-xs text-gray-400">*</span>
+                                )}
+                              </div>
+                              {field.reference_name && field.reference_name !== (field.key || field.parameter_name || field.field_name || field.name) && (
+                                <div className="text-xs text-gray-400 font-normal">{field.reference_name}</div>
                               )}
                             </td>
                             <td className="px-2 py-1.5 text-sm text-gray-900">

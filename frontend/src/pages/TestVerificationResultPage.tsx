@@ -13,9 +13,11 @@ import {
   ClipboardCheck,
   FileText,
   AlertTriangle,
+  Download,
 } from 'lucide-react';
 import { testVerificationService } from '@/services/test-verification.service';
 import { TestVerificationResultResponse } from '@/types/case.types';
+import { API_BASE_URL, STORAGE_KEYS } from '@/utils/constants';
 import { formatDateTime } from '@/utils/formatters';
 
 export const TestVerificationResultPage = () => {
@@ -43,6 +45,31 @@ export const TestVerificationResultPage = () => {
       setError(err.response?.data?.detail || 'Failed to load test verification result');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDownloadExcel = async () => {
+    if (!caseId) return;
+
+    try {
+      const token = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+      const url = `${API_BASE_URL}/cases/${caseId}/test-verification/export-excel`;
+
+      const response = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `TestVerification_${caseId}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(downloadUrl);
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error('Download failed:', err);
     }
   };
 
@@ -116,7 +143,12 @@ export const TestVerificationResultPage = () => {
           <h1 className="text-lg font-semibold">Test Requirements</h1>
           <Badge variant="secondary" className="text-xs">v{data.version}</Badge>
         </div>
-        {getStatusBadge(data.status)}
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleDownloadExcel}>
+            <Download className="h-4 w-4" />
+          </Button>
+          {getStatusBadge(data.status)}
+        </div>
       </div>
 
       {/* Summary Card */}

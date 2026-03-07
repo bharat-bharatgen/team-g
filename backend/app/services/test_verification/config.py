@@ -6,7 +6,7 @@ These test names should match the standardized parameter names in pathology conf
 """
 
 # Category → List of tests mapping
-# Test names must match pathology config STANDARD_PARAMETERS keys
+# Test names must match the standard_name values produced by the v2 extract prompt
 CATEGORY_TESTS = {
     "HbA1c": ["HbA1c"],
     

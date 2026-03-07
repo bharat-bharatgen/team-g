@@ -200,19 +200,39 @@ export interface Contradiction {
 }
 
 
-// Citation item with text and reference IDs
+// Citation item with text and reference IDs (v1 format)
 export interface CitedItem {
   text: string;
-  refs: string[];  // e.g., ["PATH:HbA1c", "MER:P1:Q3a"]
+  refs: string[];
+}
+
+// v2 format types
+export interface IntegrityConcern {
+  flag: string;
+  mer_ref: string;
+  path_ref: string;
+}
+
+export interface ClinicalDiscovery {
+  finding: string;
+  severity: 'critical' | 'moderate' | 'mild';
+  refs: string[];
+}
+
+// Structured summary (v2 latest)
+export interface RiskSummaryStructured {
+  mer: string;
+  pathology: string;
+  conclusion: string;
 }
 
 // Reference lookup info
 export interface ReferenceInfo {
   source: 'pathology' | 'mer';
-  param?: string;         // for pathology
-  page?: number;          // page number in document (for both pathology and MER)
-  section?: string;       // for MER
-  field?: string;         // for MER
+  param?: string;
+  page?: number;
+  section?: string;
+  field?: string;
   value?: string;
   unit?: string;
 }
@@ -226,10 +246,18 @@ export interface RiskResultResponse {
   critical_flags: CriticalFlag[];
   contradictions: Contradiction[];
   llm_response: {
-    red_flags: CitedItem[];
-    contradictions: CitedItem[];
-    summary: string;
-    risk_level: string;  // "High" | "Intermediate" | "Low"
+    summary: string | RiskSummaryStructured;
+    risk_level: string;
+
+    // v1 format (old)
+    red_flags?: CitedItem[];
+    contradictions?: CitedItem[];
+
+    // v2 format (new)
+    risk_score?: number;
+    applicant?: string;
+    integrity_concerns?: IntegrityConcern[];
+    clinical_discoveries?: ClinicalDiscovery[];
   };
   references: Record<string, ReferenceInfo>;
   created_at: string;
@@ -239,10 +267,19 @@ export interface RiskSummaryResponse {
   case_id: string;
   version: number;
   based_on: BasedOnInfo;
-  red_flags: (string | CitedItem)[];  // Can be strings (old) or CitedItem (new)
-  contradictions: (string | CitedItem)[];  // Can be strings (old) or CitedItem (new)
-  summary: string;
-  risk_level: string;  // "High" | "Intermediate" | "Low"
+  summary: string | RiskSummaryStructured;
+  risk_level: string;
+
+  // v1 format (old)
+  red_flags?: (string | CitedItem)[];
+  contradictions?: (string | CitedItem)[];
+
+  // v2 format (new)
+  risk_score?: number;
+  applicant?: string;
+  integrity_concerns?: IntegrityConcern[];
+  clinical_discoveries?: ClinicalDiscovery[];
+
   created_at: string;
 }
 

@@ -1,15 +1,20 @@
 """
-Pathology standardized parameters configuration.
+Pathology parameters configuration (NEW_PARAMS).
 
-Edit this file to add/remove/update parameters, normal ranges, or aliases.
-The mapping prompt is dynamically built from this config.
+Used for:
+- Unit/range sanity-check reference in the v2 extract prompt
+- Post-extraction range comparison (config_range vs report range)
+
+NOTE: The canonical list of standard parameter names and aliases lives in the
+v2 prompt (extract.py build_system_prompt_v2). Edits to parameter names or
+aliases must be made there. This file only provides numeric ranges and units.
 """
 
-# ─── 50 Standardized Parameters ─────────────────────────────────────────────
+# ─── Parameters by sample type ──────────────────────────────────────────────
 # Each entry: { "unit", "range", "aliases" }
 # - unit: standard unit for this parameter
-# - range: normal reference range string
-# - aliases: list of common name variations found in lab reports
+# - range: normal reference range (list, dict, or string)
+# - aliases: common name variations (used in the unit/range reference table)
 
 NEW_PARAMS = {
     "blood": {
@@ -156,7 +161,7 @@ NEW_PARAMS = {
             "range": [0.0, 0.4],
             "aliases": ["Bilirubin Direct", "Conjugated Bilirubin"],
         },
-        "Alka Phosphatases": {
+        "Alka Phosphates": {
             "unit": "U/L",
             "range": [78, 220],
             "aliases": ["Alkaline Phosphatase", "ALP"],
@@ -213,10 +218,10 @@ NEW_PARAMS = {
             "range": [0, 20],
             "aliases": [],
         },
-        "Sugar": {
+        "Urine Sugar": {
             "unit": "/hpf",
             "range": [None, 0],
-            "aliases": [],
+            "aliases": ["Sugar", "Glucose"],
         },
         "Albumin/Proteins": {
             "unit": None,
@@ -268,314 +273,6 @@ NEW_PARAMS = {
     }
 }
 
-STANDARD_PARAMETERS = {
-    # ── Haematology ──────────────────────────────────────────────────────
-    "RBC": {
-        "sample_type": "blood",
-        "unit": "million/µL",
-        "range": "4.5-5.5",
-        "aliases": ["RBC Count", "Red Blood Cell Count", "Erythrocyte Count", "TOTAL COUNT ERYTHROCYTIC"],
-    },
-    "Hb%": {
-        "unit": "g/dL",
-        "range": "12.0-16.0",
-        "aliases": ["Haemoglobin", "Hemoglobin", "Hb", "HAEMOGLOBIN"],
-    },
-    "Platelets": {
-        "unit": "cells/µL",
-        "range": "150000-410000",
-        "aliases": ["Platelet Count", "Thrombocyte Count", "PLATELET COUNT"],
-    },
-    "WBC": {
-        "unit": "cells/µL",
-        "range": "4000-11000",
-        "aliases": ["WBC Count", "Total Leucocyte Count", "TLC", "LEUCOCYTIC", "Total WBC Count"],
-    },
-    "MCV": {
-        "unit": "fL",
-        "range": "76-96",
-        "aliases": ["Mean Corpuscular Volume", "M C V"],
-    },
-    "ESR": {
-        "unit": "mm/hr",
-        "range": "0-20",
-        "aliases": ["Erythrocyte Sedimentation Rate", "E S R"],
-    },
-    "PCV": {
-        "unit": "%",
-        "range": "38-54",
-        "aliases": ["Packed Cell Volume", "Hematocrit", "HCT", "Hct", "P C V"],
-    },
-    "MCH": {
-        "unit": "pg",
-        "range": "27-32",
-        "aliases": ["Mean Corpuscular Hemoglobin", "Mean Corpuscular Haemoglobin", "M C H"],
-    },
-    "MCHC": {
-        "unit": "g/dL",
-        "range": "31-35",
-        "aliases": ["Mean Corpuscular Hemoglobin Concentration", "Mean Corpuscular Haemoglobin Concentration", "M C H C"],
-    },
-
-    # ── Differential Count ───────────────────────────────────────────────
-    "Neutrophils": {
-        "unit": "%",
-        "range": "40-75",
-        "aliases": ["Neutrophil", "Neutrophil %", "Polymorphs"],
-    },
-    "Lymphocytes": {
-        "unit": "%",
-        "range": "20-45",
-        "aliases": ["Lymphocyte", "Lymphocyte %"],
-    },
-    "Monocytes": {
-        "unit": "%",
-        "range": "1-6",
-        "aliases": ["Monocyte", "Monocyte %"],
-    },
-    "Eosinophils": {
-        "unit": "%",
-        "range": "1-6",
-        "aliases": ["Eosinophil", "Eosinophil %"],
-    },
-    "Basophils": {
-        "unit": "%",
-        "range": "0-2",
-        "aliases": ["Basophil", "Basophil %"],
-    },
-
-    # ── Lipid Profile ────────────────────────────────────────────────────
-    "HDL": {
-        "unit": "mg/dL",
-        "range": "40-60",
-        "aliases": ["HDL Cholesterol", "HDL-C"],
-    },
-    "LDL": {
-        "unit": "mg/dL",
-        "range": "0-100",
-        "aliases": ["LDL Cholesterol", "LDL-C"],
-    },
-    "Total Cholesterol": {
-        "unit": "mg/dL",
-        "range": "0-200",
-        "aliases": ["Serum Cholesterol", "Cholesterol Total"],
-    },
-    "Triglycerides": {
-        "unit": "mg/dL",
-        "range": "0-150",
-        "aliases": ["Serum Triglycerides", "TG"],
-    },
-
-    # ── Kidney Function ──────────────────────────────────────────────────
-    "Serum Creatinine": {
-        "unit": "mg/dL",
-        "range": "0.7-1.3",
-        "aliases": ["Creatinine"],
-    },
-    "BUN": {
-        "unit": "mg/dL",
-        "range": "7-20",
-        "aliases": ["Blood Urea Nitrogen", "Urea"],
-    },
-    "Serum Uric Acid": {
-        "unit": "mg/dL",
-        "range": "3.5-7.2",
-        "aliases": ["Uric Acid", "URIC ACID"],
-    },
-
-    # ── Liver Function ───────────────────────────────────────────────────
-    "Serum Albumin": {
-        "unit": "g/dL",
-        "range": "3.5-5.5",
-        "aliases": ["Albumin"],
-    },
-    "Serum Protein": {
-        "unit": "g/dL",
-        "range": "6.0-8.3",
-        "aliases": ["Total Protein"],
-    },
-    "Alka Phosphates": {
-        "unit": "U/L",
-        "range": "44-147",
-        "aliases": ["Alkaline Phosphatase", "ALP"],
-    },
-    "SGPT": {
-        "unit": "U/L",
-        "range": "7-56",
-        "aliases": ["ALT", "Alanine Aminotransferase"],
-    },
-    "SGOT": {
-        "unit": "U/L",
-        "range": "10-40",
-        "aliases": ["AST", "Aspartate Aminotransferase"],
-    },
-    "GGTP": {
-        "unit": "U/L",
-        "range": "9-48",
-        "aliases": ["Gamma GT", "GGT", "Gamma Glutamyl Transferase"],
-    },
-    "Total Bilirubin": {
-        "unit": "mg/dL",
-        "range": "0.1-1.2",
-        "aliases": ["Bilirubin Total"],
-    },
-    "Direct Bilirubin": {
-        "unit": "mg/dL",
-        "range": "0.0-0.3",
-        "aliases": ["Bilirubin Direct", "Conjugated Bilirubin"],
-    },
-    "Indirect Bilirubin": {
-        "unit": "mg/dL",
-        "range": "0.1-0.9",
-        "aliases": ["Bilirubin Indirect", "Unconjugated Bilirubin"],
-    },
-
-    # ── Blood Sugar ──────────────────────────────────────────────────────
-    "Sugar": {
-        "unit": "mg/dL",
-        "range": "70-100",
-        "aliases": ["Fasting Blood Sugar", "FBS", "Glucose Fasting"],
-    },
-    "RBS": {
-        "unit": "mg/dL",
-        "range": "70-140",
-        "aliases": ["Random Blood Sugar", "Glucose Random"],
-    },
-    "PPBS": {
-        "unit": "mg/dL",
-        "range": "70-140",
-        "aliases": ["Post Prandial Blood Sugar", "Glucose PP"],
-    },
-    "HbA1c": {
-        "sample_type": "blood",
-        "unit": "%",
-        "range": [4.0, 6.0],
-        "aliases": ["Glycated Hemoglobin", "Glycosylated Hemoglobin", "Glycated Haemoglobin"],
-    },
-
-    # ── Urine ────────────────────────────────────────────────────────────
-    "Pus Cells": {
-        "unit": "/hpf",
-        "range": "0-5",
-        "aliases": ["Pus Cells"],
-    },
-    "Albumin/Proteins": {
-        "unit": None,
-        "range": "Nil",
-        "aliases": ["Urine Protein", "Urine Albumin", "Protein", "Proteins", "Albumin", "Urine Proteins"],
-    },
-    "Urine Sugar": {
-        "unit": None,
-        "range": "Nil",
-        "aliases": ["Glucose Urine", "Sugar Urine", "Reducing Substances", "Urine Glucose", "Reducing Sugar"],
-    },
-    "Microalbumin": {
-        "unit": "mg/L",
-        "range": "< 30",
-        "aliases": ["Microalbuminuria", "Urine Microalbumin"],
-    },
-
-    # ── Serology / Infectious ────────────────────────────────────────────
-    "HBsAg": {
-        "unit": None,
-        "range": "Non-Reactive",
-        "aliases": ["Hepatitis B Surface Antigen"],
-    },
-    "HIV": {
-        "unit": None,
-        "range": "Non-Reactive",
-        "aliases": ["HIV I & II", "HIV Antibody"],
-    },
-    "HCV": {
-        "unit": None,
-        "range": "Non-Reactive",
-        "aliases": ["Hepatitis C Antibody", "Anti HCV"],
-    },
-
-    # ── Thyroid ───────────────────────────────────────────────────────────
-    "T3": {
-        "unit": "ng/dL",
-        "range": "80-200",
-        "aliases": ["Triiodothyronine"],
-    },
-    "T4": {
-        "unit": "µg/dL",
-        "range": "5.1-14.1",
-        "aliases": ["Thyroxine"],
-    },
-    "TSH": {
-        "unit": "µIU/mL",
-        "range": "0.27-4.20",
-        "aliases": ["Thyroid Stimulating Hormone"],
-    },
-
-    # ── Special Investigations ───────────────────────────────────────────
-    "ECG": {
-        "unit": None,
-        "range": "Normal",
-        "aliases": ["Electrocardiogram", "Electrocardiography"],
-    },
-    "TMT": {
-        "unit": None,
-        "range": "Normal",
-        "aliases": ["Treadmill Test", "Exercise Stress Test"],
-    },
-    "Nicotine": {
-        "unit": "ng/mL",
-        "range": "Negative",
-        "aliases": ["Cotinine", "Urine Cotinine"],
-    },
-    "2D Echo": {
-        "unit": None,
-        "range": "Normal",
-        "aliases": ["Echocardiogram", "Echo"],
-    },
-    "CXR": {
-        "unit": None,
-        "range": "Normal",
-        "aliases": ["Chest X-Ray", "X-Ray Chest"],
-    },
-    "PFT": {
-        "unit": None,
-        "range": "Normal",
-        "aliases": ["Pulmonary Function Test", "Spirometry"],
-    },
-    "USG": {
-        "unit": None,
-        "range": "Normal",
-        "aliases": ["Ultrasonography", "Ultrasound"],
-    },
-    "PSA": {
-        "unit": "ng/mL",
-        "range": "0-4.0",
-        "aliases": ["Prostate Specific Antigen"],
-    },
-    "Fundus": {
-        "unit": None,
-        "range": "Normal",
-        "aliases": ["Fundoscopy", "Fundus Photography", "Retinal Examination"],
-    },
-}
-
-# Remark is a standalone free-text field (not a test parameter)
-REMARK_FIELD = "Remark"
-
-
-# ─── Helper: build alias → standard name lookup ─────────────────────────────
-
-def build_alias_map() -> dict:
-    """Build a flat dict mapping every alias (lowercased) to its standard name."""
-    alias_map = {}
-    for std_name, info in STANDARD_PARAMETERS.items():
-        alias_map[std_name.lower()] = std_name
-        for alias in info.get("aliases", []):
-            alias_map[alias.lower()] = std_name
-    return alias_map
-
-
-ALIAS_MAP = build_alias_map()
-
-
 # ─── Helper: lookup range from NEW_PARAMS ────────────────────────────────────
 
 def get_config_range(
@@ -617,31 +314,3 @@ def get_config_range(
     return {}
 
 
-def build_new_params_lookup() -> dict:
-    """
-    Build a flat lookup dict from NEW_PARAMS.
-
-    Returns:
-        Dict mapping (standard_name, sample_type) -> param_info
-        Also maps standard_name -> param_info for first match (blood priority)
-    """
-    lookup = {}
-
-    # Priority order for default lookup
-    priority = ["blood", "urine", "special"]
-
-    for sample_type in priority:
-        if sample_type not in NEW_PARAMS:
-            continue
-        for param_name, param_info in NEW_PARAMS[sample_type].items():
-            # Key by (name, sample_type) for exact lookup
-            lookup[(param_name, sample_type)] = param_info
-
-            # Key by name only for default lookup (first match wins)
-            if param_name not in lookup:
-                lookup[param_name] = {**param_info, "_sample_type": sample_type}
-
-    return lookup
-
-
-NEW_PARAMS_LOOKUP = build_new_params_lookup()

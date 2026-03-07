@@ -44,7 +44,9 @@ async def _get_latest_mer_result(case_id: str) -> Tuple[Optional[Dict], Optional
         sort=[("version", -1)],
     )
     if result:
-        return result.get("pages", {}), result.get("version")
+        raw_pages = result.get("pages", {})
+        mer_data = {f"page_{k}": v for k, v in raw_pages.items()}
+        return mer_data, result.get("version")
     return None, None
 
 
@@ -224,7 +226,7 @@ async def process_risk(case_id: str) -> Dict[str, Any]:
         "pathology_version": pathology_version,
         "source_freshness": source_freshness,
         "risk_level": llm_response.get("risk_level"),
-        "red_flags": llm_response.get("red_flags", []),
-        "contradictions": llm_response.get("contradictions", []),
         "summary": llm_response.get("summary"),
+        "integrity_concerns": llm_response.get("integrity_concerns", []),
+        "clinical_discoveries": llm_response.get("clinical_discoveries", []),
     }

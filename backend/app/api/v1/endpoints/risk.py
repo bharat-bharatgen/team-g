@@ -5,13 +5,17 @@ Provides endpoints to:
 - Get risk analysis result (latest or specific version)
 - List all risk analysis versions
 - Get quick summary of risk assessment
+- Export result as Excel
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from bson import ObjectId
+import io
 
 from app.core.security import get_current_user
 from app.dependencies import get_database
+from app.services.risk.excel_export import generate_excel
 from app.api.v1.schemas.risk import (
     RiskResultResponse,
     RiskVersionsResponse,
@@ -76,14 +80,25 @@ async def _list_result_versions(case_id: str):
 
 
 def _extract_risk_summary(doc):
-    """Extract risk summary fields from document."""
+    """Extract risk summary fields from document. Supports both v1 and v2 formats."""
     llm_response = doc.get("llm_response", {})
-    return {
-        "red_flags": llm_response.get("red_flags", []),
-        "contradictions": llm_response.get("contradictions", []),
+    result = {
         "summary": llm_response.get("summary"),
         "risk_level": llm_response.get("risk_level"),
     }
+
+    is_v2 = "integrity_concerns" in llm_response
+
+    if is_v2:
+        result["risk_score"] = llm_response.get("risk_score")
+        result["applicant"] = llm_response.get("applicant")
+        result["integrity_concerns"] = llm_response.get("integrity_concerns", [])
+        result["clinical_discoveries"] = llm_response.get("clinical_discoveries", [])
+    else:
+        result["red_flags"] = llm_response.get("red_flags", [])
+        result["contradictions"] = llm_response.get("contradictions", [])
+
+    return result
 
 
 # ─── GET /cases/{case_id}/risk/result ────────────────────────────────────────
@@ -201,9 +216,52 @@ async def get_risk_summary(
             pathology_version=doc.get("pathology_version"),
             source_freshness=doc.get("source_freshness", 0),
         ),
-        red_flags=risk_summary["red_flags"],
-        contradictions=risk_summary["contradictions"],
         summary=risk_summary["summary"],
         risk_level=risk_summary["risk_level"],
+        red_flags=risk_summary.get("red_flags", []),
+        contradictions=risk_summary.get("contradictions", []),
+        risk_score=risk_summary.get("risk_score"),
+        applicant=risk_summary.get("applicant"),
+        integrity_concerns=risk_summary.get("integrity_concerns", []),
+        clinical_discoveries=risk_summary.get("clinical_discoveries", []),
         created_at=doc["created_at"],
+    )
+
+
+# ─── GET /cases/{case_id}/risk/export-excel ──────────────────────────────────
+
+
+@router.get("/{case_id}/risk/export-excel")
+async def export_risk_excel(
+    case_id: str,
+    version: int = Query(None, description="Specific version. Omit for latest."),
+    user: dict = Depends(get_current_user),
+):
+    """
+    Download risk analysis result as an Excel (.xlsx) file.
+
+    Multi-sheet workbook with summary, findings, abnormal labs, and
+    pre-computed flags/contradictions. Dynamically generated.
+    """
+    await _get_case_or_404(case_id, user["id"])
+
+    if version is not None:
+        doc = await _get_result_by_version(case_id, version)
+    else:
+        doc = await _get_latest_result(case_id)
+
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No risk analysis result found. Processing may not have completed yet.",
+        )
+
+    ver = doc["version"]
+    excel_bytes = generate_excel(doc, case_id, ver)
+    filename = f"RiskAnalysis_{case_id}_v{ver}.xlsx"
+
+    return StreamingResponse(
+        io.BytesIO(excel_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )

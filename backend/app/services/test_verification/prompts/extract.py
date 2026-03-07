@@ -5,6 +5,7 @@ LLM prompt for extracting insurance test requirements from Page 5.
 from app.services.llm.config import LLMCallConfig
 
 CONFIG = LLMCallConfig(
+    base_url="https://apps.bharatgen.dev/inference/v1/chat/completions",
     model="qwen3.5-27b",
     temperature=0.0,
     response_format="json_object",

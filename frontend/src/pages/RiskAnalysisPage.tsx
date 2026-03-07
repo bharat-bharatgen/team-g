@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Loading } from '@/components/ui/loading';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, AlertTriangle, Info, TrendingUp, AlertCircle, ExternalLink } from 'lucide-react';
-import { RISK_LEVEL_COLORS, RISK_LEVEL_LABELS } from '@/utils/constants';
+import { ArrowLeft, AlertTriangle, Info, AlertCircle, ExternalLink, ShieldAlert, Stethoscope, FileText, FlaskConical, Download } from 'lucide-react';
+import { API_BASE_URL, RISK_LEVEL_COLORS, RISK_LEVEL_LABELS, STORAGE_KEYS } from '@/utils/constants';
 import { formatDateTime } from '@/utils/formatters';
 
 export const RiskAnalysisPage = () => {
@@ -40,6 +40,32 @@ export const RiskAnalysisPage = () => {
       }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDownloadExcel = async () => {
+    if (!id) return;
+
+    try {
+      const token = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+      const version = riskData?.version ? `?version=${riskData.version}` : '';
+      const url = `${API_BASE_URL}/cases/${id}/risk/export-excel${version}`;
+
+      const response = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `RiskAnalysis_${id}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(downloadUrl);
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error('Download failed:', err);
     }
   };
 
@@ -174,10 +200,24 @@ export const RiskAnalysisPage = () => {
   }
 
   const { llm_response, critical_flags, contradictions, based_on } = riskData;
+  const isNewFormat = !!llm_response.integrity_concerns;
+
+  const getSeverityBadge = (severity: string) => {
+    const styles: Record<string, string> = {
+      critical: 'bg-red-100 text-red-800 border-red-300',
+      moderate: 'bg-amber-100 text-amber-800 border-amber-300',
+      mild: 'bg-blue-100 text-blue-800 border-blue-300',
+    };
+    return (
+      <Badge variant="outline" className={`text-xs ${styles[severity] || ''}`}>
+        {severity}
+      </Badge>
+    );
+  };
 
   return (
     <div className="container mx-auto py-6 space-y-6">
-      {/* Header - compact, with page heading */}
+      {/* Header */}
       <div className="flex items-center justify-between flex-shrink-0 pb-2">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => navigate(`/cases/${id}`)}>
@@ -187,8 +227,18 @@ export const RiskAnalysisPage = () => {
           <span className="text-muted-foreground">|</span>
           <h1 className="text-lg font-semibold">Risk Assessment</h1>
           <Badge variant="secondary" className="text-xs">v{riskData.version}</Badge>
+          {isNewFormat && llm_response.risk_score && (
+            <Badge variant="outline" className="text-xs font-mono">
+              Score: {llm_response.risk_score}/10
+            </Badge>
+          )}
         </div>
-        {getRiskLevelBadge(llm_response.risk_level)}
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleDownloadExcel}>
+            <Download className="h-4 w-4" />
+          </Button>
+          {getRiskLevelBadge(llm_response.risk_level)}
+        </div>
       </div>
 
       {/* Summary Card */}
@@ -199,7 +249,9 @@ export const RiskAnalysisPage = () => {
               {getRiskIcon(llm_response.risk_level)}
             </div>
             <div className="flex-1">
-              <CardTitle className="text-2xl mb-2">Summary</CardTitle>
+              <CardTitle className="text-2xl mb-2">
+                {isNewFormat && llm_response.applicant ? llm_response.applicant : 'Summary'}
+              </CardTitle>
               <CardDescription className="text-base">
                 {based_on.mer_version && `MER v${based_on.mer_version}`}
                 {based_on.pathology_version && ` • Pathology v${based_on.pathology_version}`}
@@ -208,84 +260,182 @@ export const RiskAnalysisPage = () => {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Summary Text */}
-          <div>
-            <h4 className="font-semibold mb-3 flex items-center gap-2">
-              <TrendingUp className="h-4 w-4" />
-              Overall Assessment
-            </h4>
-            <p className="text-sm leading-relaxed bg-secondary/30 p-4 rounded-xl">
-              {llm_response.summary || 'No summary available'}
-            </p>
-          </div>
-
-          {/* Patient Info - temporarily hidden
-          {patient_info && Object.keys(patient_info).length > 0 && (
-            <div className="border-t pt-4">
-              <h4 className="font-semibold mb-3 flex items-center gap-2">
-                <User className="h-4 w-4" />
-                Patient Information
-              </h4>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {Object.entries(patient_info).map(([key, value]) => (
-                  <div key={key}>
-                    <p className="text-xs text-muted-foreground capitalize">{key.replace(/_/g, ' ')}</p>
-                    <p className="text-sm font-medium">{String(value) || '-'}</p>
-                  </div>
-                ))}
+        <CardContent className="space-y-3">
+          {typeof llm_response.summary === 'object' && llm_response.summary !== null ? (
+            <div className="space-y-2">
+              <div className="flex items-start gap-3 p-3 bg-white rounded-lg border border-primary/20">
+                <FileText className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="text-xs font-semibold text-primary uppercase tracking-wide">MER Findings</span>
+                  <p className="text-sm text-foreground mt-0.5">{llm_response.summary.mer}</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 p-3 bg-white rounded-lg border border-primary/20">
+                <FlaskConical className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                <div>
+                  <span className="text-xs font-semibold text-primary uppercase tracking-wide">Pathology Findings</span>
+                  <p className="text-sm text-foreground mt-0.5">{llm_response.summary.pathology}</p>
+                </div>
+              </div>
+              <div className={`flex items-start gap-3 p-3 rounded-lg border ${
+                llm_response.risk_level === 'High' ? 'bg-red-50 border-red-200' :
+                llm_response.risk_level === 'Intermediate' ? 'bg-amber-50 border-amber-200' :
+                'bg-green-50 border-green-200'
+              }`}>
+                <AlertCircle className={`h-5 w-5 flex-shrink-0 mt-0.5 ${
+                  llm_response.risk_level === 'High' ? 'text-red-600' :
+                  llm_response.risk_level === 'Intermediate' ? 'text-amber-600' :
+                  'text-green-600'
+                }`} />
+                <div>
+                  <span className={`text-xs font-semibold uppercase tracking-wide ${
+                    llm_response.risk_level === 'High' ? 'text-red-700' :
+                    llm_response.risk_level === 'Intermediate' ? 'text-amber-700' :
+                    'text-green-700'
+                  }`}>Conclusion</span>
+                  <p className="text-sm font-medium text-foreground mt-0.5">{llm_response.summary.conclusion}</p>
+                </div>
               </div>
             </div>
+          ) : (
+            <p className="text-sm leading-relaxed bg-secondary/30 p-4 rounded-xl font-medium">
+              {llm_response.summary || 'No summary available'}
+            </p>
           )}
-          */}
         </CardContent>
       </Card>
 
-      {/* Red Flags */}
-      {llm_response.red_flags && llm_response.red_flags.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2 text-red-700">
-              <AlertTriangle className="h-5 w-5" />
-              Red Flags ({llm_response.red_flags.length})
-            </CardTitle>
-            <CardDescription className="text-xs text-muted-foreground">
-              Click on citation badges to view source documents
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-3">
-              {llm_response.red_flags.map((flag, idx) => 
-                renderCitedItem(flag, idx, 'bg-red-50 border-red-200', 'text-red-900', 'text-red-600', AlertTriangle)
-              )}
-            </ul>
-          </CardContent>
-        </Card>
+      {/* ─── New Format (v2) ─── */}
+      {isNewFormat && (
+        <>
+          {/* Integrity Concerns */}
+          {llm_response.integrity_concerns && llm_response.integrity_concerns.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2 text-red-700">
+                  <ShieldAlert className="h-5 w-5" />
+                  Integrity Concerns ({llm_response.integrity_concerns.length})
+                </CardTitle>
+                <CardDescription className="text-xs text-muted-foreground">
+                  Knowingly concealed behaviors or known events
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-3">
+                  {llm_response.integrity_concerns.map((item, idx) => (
+                    <li key={idx} className="flex items-start gap-3 p-3 bg-white rounded-lg border border-red-300">
+                      <ShieldAlert className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <span className="text-sm text-foreground">{item.flag}</span>
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {item.mer_ref && renderCitationBadge(item.mer_ref)}
+                          {item.path_ref && renderCitationBadge(item.path_ref)}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Clinical Discoveries */}
+          {llm_response.clinical_discoveries && llm_response.clinical_discoveries.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2 text-amber-700">
+                  <Stethoscope className="h-5 w-5" />
+                  Clinical Discoveries ({llm_response.clinical_discoveries.length})
+                </CardTitle>
+                <CardDescription className="text-xs text-muted-foreground">
+                  Conditions found via examination — applicant may not have been aware
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-3">
+                  {llm_response.clinical_discoveries.map((item, idx) => {
+                    const borderClass = item.severity === 'critical' ? 'border-red-300' :
+                                       item.severity === 'moderate' ? 'border-amber-300' :
+                                       'border-primary/20';
+                    return (
+                      <li key={idx} className={`flex items-start gap-3 p-3 rounded-lg bg-white border ${borderClass}`}>
+                        <Stethoscope className={`h-5 w-5 flex-shrink-0 mt-0.5 ${
+                          item.severity === 'critical' ? 'text-red-600' :
+                          item.severity === 'moderate' ? 'text-amber-600' : 'text-primary'
+                        }`} />
+                        <div className="flex-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="text-sm text-foreground">{item.finding}</span>
+                            {getSeverityBadge(item.severity)}
+                          </div>
+                          {item.refs && item.refs.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {item.refs.map((refId) => renderCitationBadge(refId))}
+                            </div>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Abnormal Labs removed — raw lab data is in Pathology Results page */}
+        </>
       )}
 
-      {/* Contradictions from LLM */}
-      {llm_response.contradictions && llm_response.contradictions.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2 text-orange-700">
-              <AlertCircle className="h-5 w-5" />
-              Contradictions Identified ({llm_response.contradictions.length})
-            </CardTitle>
-            <CardDescription className="text-xs text-muted-foreground">
-              Click on citation badges to view source documents
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-3">
-              {llm_response.contradictions.map((contradiction, idx) => 
-                renderCitedItem(contradiction, idx, 'bg-orange-50 border-orange-200', 'text-orange-900', 'text-orange-600', AlertCircle)
-              )}
-            </ul>
-          </CardContent>
-        </Card>
+      {/* ─── Old Format (v1) ─── */}
+      {!isNewFormat && (
+        <>
+          {/* Red Flags */}
+          {llm_response.red_flags && llm_response.red_flags.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2 text-red-700">
+                  <AlertTriangle className="h-5 w-5" />
+                  Red Flags ({llm_response.red_flags.length})
+                </CardTitle>
+                <CardDescription className="text-xs text-muted-foreground">
+                  Click on citation badges to view source documents
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-3">
+                  {llm_response.red_flags.map((flag, idx) => 
+                    renderCitedItem(flag, idx, 'bg-red-50 border-red-200', 'text-red-900', 'text-red-600', AlertTriangle)
+                  )}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Contradictions from LLM */}
+          {llm_response.contradictions && llm_response.contradictions.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2 text-orange-700">
+                  <AlertCircle className="h-5 w-5" />
+                  Contradictions Identified ({llm_response.contradictions.length})
+                </CardTitle>
+                <CardDescription className="text-xs text-muted-foreground">
+                  Click on citation badges to view source documents
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-3">
+                  {llm_response.contradictions.map((contradiction, idx) => 
+                    renderCitedItem(contradiction, idx, 'bg-orange-50 border-orange-200', 'text-orange-900', 'text-orange-600', AlertCircle)
+                  )}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+        </>
       )}
 
-      {/* Critical Flags (Pre-processing) */}
+      {/* Critical Flags (Pre-processing) — shown for both formats */}
       {critical_flags && critical_flags.length > 0 && (
         <Card>
           <CardHeader>
@@ -323,7 +473,7 @@ export const RiskAnalysisPage = () => {
         </Card>
       )}
 
-      {/* Contradictions (Pre-processing) */}
+      {/* Contradictions (Pre-processing) — shown for both formats */}
       {contradictions && contradictions.length > 0 && (
         <Card>
           <CardHeader>

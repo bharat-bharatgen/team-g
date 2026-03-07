@@ -5,7 +5,9 @@ Verifies that required tests from insurance requirements (Page 5) are present in
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from bson import ObjectId
+import io
 
 from app.core.security import get_current_user
 from app.dependencies import get_database
@@ -13,6 +15,7 @@ from app.services.test_verification.processor import (
     get_latest_result,
     complete_verification,
 )
+from app.services.test_verification.excel_export import generate_excel
 from app.api.v1.schemas.test_verification import (
     TestVerificationResultResponse,
     TestVerificationProcessResponse,
@@ -146,4 +149,38 @@ async def get_test_verification_result(
         mer_result_version=doc.get("mer_result_version"),
         pathology_result_version=doc.get("pathology_result_version"),
         created_at=doc["created_at"],
+    )
+
+
+# ─── GET /cases/{case_id}/test-verification/export-excel ─────────────────────
+
+@router.get("/{case_id}/test-verification/export-excel")
+async def export_test_verification_excel(
+    case_id: str,
+    user: dict = Depends(get_current_user),
+):
+    """
+    Download test verification result as an Excel (.xlsx) file.
+
+    Includes summary metadata, required tests with found/missing status,
+    and a quick-reference sheet of missing tests.
+    """
+    await _get_case_or_404(case_id, user["id"])
+
+    doc = await get_latest_result(case_id)
+
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No test verification result found. Run verification first.",
+        )
+
+    ver = doc.get("version", 1)
+    excel_bytes = generate_excel(doc, case_id, ver)
+    filename = f"TestVerification_{case_id}_v{ver}.xlsx"
+
+    return StreamingResponse(
+        io.BytesIO(excel_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )

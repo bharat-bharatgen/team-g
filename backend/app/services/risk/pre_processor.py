@@ -5,22 +5,24 @@ Extracts and prepares data from MER and pathology results for LLM analysis.
 Adds reference IDs to each data item for citation linking.
 """
 
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 
 def parse_numeric(value: Any) -> Optional[float]:
-    """Safely parse a numeric value from various formats."""
+    """Safely parse a numeric value, stripping unit suffixes like 'cm', 'kg'."""
     if value is None:
         return None
     if isinstance(value, (int, float)):
         return float(value)
     if isinstance(value, str):
-        # Remove commas and common artifacts
-        cleaned = value.replace(",", "").replace(" ", "").strip()
-        try:
-            return float(cleaned)
-        except ValueError:
-            return None
+        cleaned = value.replace(",", "").strip()
+        match = re.match(r'^-?[\d.]+', cleaned)
+        if match:
+            try:
+                return float(match.group())
+            except ValueError:
+                return None
     return None
 
 

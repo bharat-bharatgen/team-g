@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel
 
 
@@ -24,7 +24,7 @@ class RiskResultResponse(BaseModel):
     critical_flags: List[Dict[str, Any]]
     contradictions: List[Dict[str, Any]]
     llm_response: Dict[str, Any]
-    references: Dict[str, Dict[str, Any]] = {}  # ref_id -> source info for citations
+    references: Dict[str, Dict[str, Any]] = {}
     created_at: datetime
 
 
@@ -37,7 +37,7 @@ class RiskVersionEntry(BaseModel):
     mer_version: Optional[int] = None
     pathology_version: Optional[int] = None
     source_freshness: int
-    risk_level: Optional[str] = None  # High | Intermediate | Low
+    risk_level: Optional[str] = None
     created_at: datetime
 
 
@@ -58,12 +58,21 @@ class CitedItem(BaseModel):
 # ─── Summary response (for quick polling) ────────────────────────────────────
 
 class RiskSummaryResponse(BaseModel):
-    """Quick summary of risk analysis result for human decision makers."""
+    """Quick summary of risk analysis result. Supports v1 and v2 formats."""
     case_id: str
     version: int
     based_on: BasedOnInfo
-    red_flags: List[Any] = []  # Can be strings (old) or CitedItem dicts (new)
-    contradictions: List[Any] = []  # Can be strings (old) or CitedItem dicts (new)
-    summary: Optional[str] = None
-    risk_level: Optional[str] = None  # High | Intermediate | Low
+    summary: Optional[Union[str, Dict[str, str]]] = None
+    risk_level: Optional[str] = None
+
+    # v1 format (old)
+    red_flags: List[Any] = []
+    contradictions: List[Any] = []
+
+    # v2 format (new)
+    risk_score: Optional[int] = None
+    applicant: Optional[str] = None
+    integrity_concerns: List[Dict[str, Any]] = []
+    clinical_discoveries: List[Dict[str, Any]] = []
+
     created_at: datetime

@@ -1,17 +1,20 @@
 """
 Pathology parameter mapping prompt — Step 2 (Text-only model).
 
-Maps OCR-extracted test data to 50 standardized parameters.
-The prompt is dynamically built from pathology_config.py so that
-adding/changing parameters only requires editing the config file.
+Maps OCR-extracted test data to standardized parameters.
+The standard parameter list and aliases are hardcoded in
+build_system_prompt_v2(). NEW_PARAMS is only used for the
+unit/range sanity-check reference table.
 """
 
 from app.services.llm.config import LLMCallConfig
-from app.services.pathology.config import STANDARD_PARAMETERS, NEW_PARAMS
+from app.services.pathology.config import NEW_PARAMS
 
 
 CONFIG = LLMCallConfig(
+#    base_url="http://10.67.18.3:8002/v1/chat/completions",
 #    model="Qwen/Qwen3-14B",
+    base_url="https://apps.bharatgen.dev/inference/v1/chat/completions",
     #model="qwen3-14b",
     model="gpt-oss-120b",
     temperature=0.0,
@@ -20,119 +23,6 @@ CONFIG = LLMCallConfig(
     top_k=1,
     seed=133,
 )
-
-
-def _build_param_schema() -> str:
-    """Build the JSON schema section showing all 50 params with null defaults."""
-    lines = []
-    for name in STANDARD_PARAMETERS:
-        lines.append(
-            f'  "{name}": {{"value": null, "unit": null, "range": null, '
-            f'"reference_name": null, "flag": null, "method": null}}'
-        )
-    lines.append('  "Remark": null')
-    lines.append('  "unmatched_tests": []')
-    return "{\n" + ",\n".join(lines) + "\n}"
-
-
-def _build_mapping_rules() -> str:
-    """Build the alias mapping rules section from config."""
-    lines = []
-    for std_name, info in STANDARD_PARAMETERS.items():
-        aliases = info.get("aliases", [])
-        if aliases:
-            alias_str = ", ".join(aliases)
-            lines.append(f"- {alias_str} → {std_name}")
-    return "\n".join(lines)
-
-
-def _build_range_reference() -> str:
-    """Build a reference table of normal ranges for the LLM."""
-    lines = []
-    for name, info in STANDARD_PARAMETERS.items():
-        unit = info.get("unit") or ""
-        rng = info.get("range") or ""
-        lines.append(f"- {name}: {rng} {unit}".strip())
-    return "\n".join(lines)
-
-
-def build_system_prompt() -> str:
-    """Dynamically build the full system prompt from pathology_config."""
-    param_schema = _build_param_schema()
-    mapping_rules = _build_mapping_rules()
-    range_ref = _build_range_reference()
-
-    return f"""You are a medical data extraction system. Given OCR-extracted JSON data from pathology report pages, map the test results to standardized parameter names.
-
-<output_schema>
-Return a JSON object with these standardized parameters + unmatched_tests array. Each parameter is an object with: value, unit, range, reference_name, flag, method.
-Set any missing field to null.
-
-IMPORTANT: Any test from the input that does NOT map to one of the parameters below MUST be added to "unmatched_tests" array.
-
-{param_schema}
-
-The "unmatched_tests" array should contain any tests NOT matching the standard parameters above.
-Each unmatched test object should have:
-{{
-  "name": "<original test name from report>",
-  "value": "<test value>",
-  "unit": "<unit if present>",
-  "range": "<reference range if present>",
-  "flag": "<low/high/normal or null>",
-  "method": "<estimation/calculation method if present>",
-  "section_path": ["<section>", "<subsection>", ...]
-}}
-</output_schema>
-
-<mapping_rules>
-Map these common test name variations to the standardized names:
-{mapping_rules}
-</mapping_rules>
-
-<normal_ranges_reference>
-Standard normal ranges (for context, do NOT use these to calculate flags — only extract flags explicitly marked in the report):
-{range_ref}
-</normal_ranges_reference>
-
-<field_mapping>
-For standard parameters:
-- value: The test result value (as string)
-- unit: The measurement unit
-- range: The reference range as a list of two numbers (e.g., [4.5, 5.5]). If not present, set to []. If one-sided range eg. <40, then set to [None, 40]. If one-sided range eg. >30, then set to [30, None].
-- reference_name: The original test name as it appeared in the report
-- flag: "low", "high", "normal", or null (ONLY if explicitly marked)
-- method: The estimation/calculation method (e.g., "Cyanmethemoglobin", "Westergren Method")
-
-For unmatched_tests:
-- name: The original test name
-- value, unit, range, flag, method: as above
-- section_path: Array of section headers the test belongs to
-</field_mapping>
-
-<value_normalization>
-CRITICAL: All numeric values must be parsable by code.
-
-1. Remove thousand separators:
-   - "1.78.000" → "178000" (Indian dot notation)
-   - "6,600" → "6600" (Western comma notation)
-   - "1,78,000" → "178000" (Indian comma notation)
-
-2. Keep single decimal point for actual decimals: "13.19" → "13.19"
-
-3. Convert lakhs/millions to base units:
-   - "1.78" with "lakhs/cu.mm" → value: "178000", unit: "cells/µL"
-
-4. Strip leading zeros: "09" → "9"
-
-5. Separate percentage from value: "67 %" → value: "67", unit: "%"
-
-6. Handle non-numeric values as-is: "Negative", "Positive", "Trace", "Normal"
-
-7. Range normalization: extract only numeric range, keep consistent with value units
-</value_normalization>
-
-Return ONLY the JSON object. No explanations or markdown."""
 
 
 def _build_unit_range_reference() -> str:
@@ -221,7 +111,7 @@ For EACH test found in the report:
 </workflow>
 
 <standard_parameters_by_category>
-Check against these 69 standard parameters organized by category:
+Check against these 71 standard parameters organized by category:
 
 HEMATOLOGY (14): RBC, Hb%, Platelets, WBC, MCV, ESR, PCV, MCH, MCHC, Neutrophils, Lymphocytes, Monocytes, Eosinophils, Basophils
 
@@ -239,11 +129,11 @@ SEROLOGY (3): HBsAg, HIV, HCV
 
 URINE PHYSICAL (5): Volume, Color, Appearance, Specific Gravity, Reaction
 
-URINE CHEMICAL (7): Sugar, Pus Cells, Albumin/Proteins, Bile Salts, Bile Pigments, Ketones, Urobilinogen
+URINE CHEMICAL (8): Urine Sugar, Pus Cells, Albumin/Proteins, Microalbumin, Bile Salts, Bile Pigments, Ketones, Urobilinogen
 
 URINE MICROSCOPIC (5): Urine RBC, Epithelial Cells, Casts, Crystals, Bacteria
 
-OTHER (8): ECG, TMT, Nicotine, 2D Echo, CXR, PFT, USG, PSA
+OTHER (9): ECG, TMT, Nicotine, 2D Echo, CXR, PFT, USG, PSA, Fundus
 </standard_parameters_by_category>
 
 <value_normalization>
@@ -429,7 +319,8 @@ Map these test name variations to standard parameters:
 - Treadmill Test, Exercise Stress Test → TMT
 - Pulmonary Function Test, Spirometry → PFT
 - Ultrasonography, Ultrasound → USG
-- Cotinine → Nicotine
+- Cotinine, Urine Cotinine → Nicotine
+- Fundoscopy, Fundus Photography, Retinal Examination → Fundus
 - VLDL Cholesterol, VLDL-C → VLDL
 - Globulin, Total Globulin → Serum Globulin
 - Albumin Globulin Ratio, Alb : Glb, A:G Ratio, A/G → A/G Ratio
@@ -440,8 +331,9 @@ URINE MAPPINGS (sample_type will be "urine"):
 - Colour → Color
 - Sp. Gr., Sp.Gr., S.G. → Specific Gravity
 - pH, Urine pH → Reaction
-- Urine Sugar, Sugar (urine context), Glucose (urine context) → Urine Sugar
+- Urine Sugar, Sugar (urine context), Glucose (urine context), Reducing Substances, Reducing Sugar → Urine Sugar
 - Albumin (urine context), Urine Protein, Protein, Proteins → Albumin/Proteins
+- Microalbuminuria, Urine Microalbumin → Microalbumin
 - PusCells, Pus Cell, Leucocytes (urine), WBC (urine) → Pus Cells
 - Bile Salt → Bile Salts
 - Bile Pigment → Bile Pigments
