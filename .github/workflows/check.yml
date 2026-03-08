@@ -1,0 +1,19 @@
+name: PR check
+
+on:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify docker-compose is valid
+        run: docker compose -f docker-compose.yml config --quiet
+
+      - name: Check frontend builds
+        working-directory: frontend
+        run: |
+          npm ci --ignore-scripts
+          npx tsc --noEmit
