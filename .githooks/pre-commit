@@ -22,6 +22,14 @@ check "backend/app/services/storage.py"    "endpoint_url"     "endpoint_url miss
 check "backend/app/main.py"                "CORS_ORIGINS"     "CORS_ORIGINS env var missing from main.py (CORS is hardcoded)"
 check "backend/app/services/llm/client.py" "chat/completions" "/chat/completions auto-append missing from llm/client.py"
 
+# Prevent hardcoded external LLM URLs in prompt configs
+if git diff --cached --name-only | grep -q "backend/app/services/.*/prompts/"; then
+    if git diff --cached -- "backend/app/services/*/prompts/*.py" | grep "^+" | grep -q "base_url.*apps\.bharatgen\.dev\|base_url.*http[^s].*bharat"; then
+        echo "ERROR: Hardcoded external base_url found in prompt config — use LLM_API_BASE_URL env var instead"
+        FAILED=1
+    fi
+fi
+
 if [ "$FAILED" = "1" ]; then
     echo ""
     echo "Pre-commit check failed. Fix the issues above before committing."
