@@ -1,0 +1,45 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Build, tag, and deploy
+    runs-on: self-hosted   # runs on your server where docker compose is available
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # needed for full commit hash
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git identity (for VERSION commit)
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Make build script executable
+        run: chmod +x scripts/build_and_deploy.sh
+
+      - name: Run build and deploy
+        env:
+          # Forward any secrets the .env needs that aren't on disk
+          # (if your .env is already on the runner, remove these)
+          MONGODB_URL:        ${{ secrets.MONGODB_URL }}
+          LLM_API_KEY:        ${{ secrets.LLM_API_KEY }}
+          JWT_SECRET_KEY:     ${{ secrets.JWT_SECRET_KEY }}
+          AWS_ACCESS_KEY_ID:  ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+        run: ./scripts/build_and_deploy.sh patch
+
+      - name: Commit bumped VERSION back to main
+        run: |
+          VERSION=$(cat VERSION)
+          git add VERSION
+          git diff --cached --quiet || git commit -m "ci: bump version to $VERSION [skip ci]"
+          git push
