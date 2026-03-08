@@ -28,7 +28,9 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Show current version
-        run: echo "Current version $(cat VERSION) — will bump ${{ github.event.inputs.bump }}"
+        run: |
+          current=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "0.0.0")
+          echo "Current version: $current — will bump ${{ github.event.inputs.bump }}"
 
       - name: Make build script executable
         run: chmod +x scripts/build_and_deploy.sh
