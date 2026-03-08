@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     # Application
     app_env: str = "development"
     log_level: str = "INFO"
+    app_version: str = "dev"
     
     # Face Match Algorithm: "v1" (YuNet+SFace) or "v2" (InsightFace/MobileFaceNet)
     face_match_algorithm: str = "v2"
