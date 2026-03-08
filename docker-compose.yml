@@ -3,7 +3,7 @@ version: "3.8"
 services:
   mongodb:
     image: mongo:7.0
-    container_name: insure-copilot-DB
+    container_name: insure-copilot-db
     restart: unless-stopped
     ports:
       - "27017:27017"
@@ -18,13 +18,13 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: insure-copilot-BE
-    container_name: insure-copilot-BE
+    image: insure-copilot-be
+    container_name: insure-copilot-be
     restart: unless-stopped
     env_file:
       - .env
     environment:
-      - MONGODB_URL=mongodb://insure-copilot-DB:27017
+      - MONGODB_URL=mongodb://insure-copilot-db:27017
     ports:
       - "48000:48000"
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "48000"]
@@ -45,13 +45,13 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: insure-copilot-WORKER
-    container_name: insure-copilot-WORKER
+    image: insure-copilot-worker
+    container_name: insure-copilot-worker
     restart: unless-stopped
     env_file:
       - .env
     environment:
-      - MONGODB_URL=mongodb://insure-copilot-DB:27017
+      - MONGODB_URL=mongodb://insure-copilot-db:27017
     command: ["python", "-m", "app.worker"]
     depends_on:
       - mongodb
@@ -67,8 +67,8 @@ services:
       args:
         VITE_API_BASE_URL: /api/v1
         VITE_APP_NAME: InsureCopilot
-    image: insure-copilot-FE
-    container_name: insure-copilot-FE
+    image: insure-copilot-fe
+    container_name: insure-copilot-fe
     restart: unless-stopped
     ports:
       - "43000:43000"
