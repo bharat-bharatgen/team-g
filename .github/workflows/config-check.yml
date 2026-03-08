@@ -8,12 +8,14 @@ on:
       - 'backend/app/services/storage.py'
       - 'backend/app/main.py'
       - 'backend/app/services/llm/client.py'
+      - '.github/workflows/config-check.yml'
   pull_request:
     paths:
       - 'backend/app/config.py'
       - 'backend/app/services/storage.py'
       - 'backend/app/main.py'
       - 'backend/app/services/llm/client.py'
+      - '.github/workflows/config-check.yml'
   workflow_dispatch:
 
 jobs:
