@@ -10,7 +10,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Verify docker-compose is valid
-        run: docker compose -f docker-compose.yml config --quiet
+        run: |
+          touch .env
+          docker compose -f docker-compose.yml config --quiet
 
       - name: Check frontend builds
         working-directory: frontend
