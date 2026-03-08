@@ -32,6 +32,9 @@ jobs:
           current=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
           echo "Current version: $current — will bump ${{ github.event.inputs.bump }}"
 
+      - name: Copy .env from project directory
+        run: cp /home/bharat.patil/projects/team-g/.env .env
+
       - name: Make build script executable
         run: chmod +x scripts/build_and_deploy.sh
 

@@ -49,18 +49,18 @@ echo "Will bump version: $current → $new_version"
 # --------------------------------------------------------------------------
 # 2. Save previous image IDs for rollback
 # --------------------------------------------------------------------------
-prev_backend="$(docker images insure-copilot-BE:latest --format '{{.ID}}' 2>/dev/null || true)"
-prev_frontend="$(docker images insure-copilot-FE:latest --format '{{.ID}}' 2>/dev/null || true)"
-prev_worker="$(docker images insure-copilot-WORKER:latest --format '{{.ID}}' 2>/dev/null || true)"
+prev_backend="$(docker images insure-copilot-be:latest --format '{{.ID}}' 2>/dev/null || true)"
+prev_frontend="$(docker images insure-copilot-fe:latest --format '{{.ID}}' 2>/dev/null || true)"
+prev_worker="$(docker images insure-copilot-worker:latest --format '{{.ID}}' 2>/dev/null || true)"
 
 rollback() {
   echo ""
   echo "ERROR: Deploy failed. Rolling back to previous images..."
 
   # Retag previous images back to latest if they existed
-  if [ -n "$prev_backend" ];  then docker tag "$prev_backend"  insure-copilot-BE:latest;     fi
-  if [ -n "$prev_frontend" ]; then docker tag "$prev_frontend" insure-copilot-FE:latest;     fi
-  if [ -n "$prev_worker" ];   then docker tag "$prev_worker"   insure-copilot-WORKER:latest; fi
+  if [ -n "$prev_backend" ];  then docker tag "$prev_backend"  insure-copilot-be:latest;     fi
+  if [ -n "$prev_frontend" ]; then docker tag "$prev_frontend" insure-copilot-fe:latest;     fi
+  if [ -n "$prev_worker" ];   then docker tag "$prev_worker"   insure-copilot-worker:latest; fi
 
   # Restart with previous images
   docker compose -f "$COMPOSE_FILE" up -d --no-build
@@ -88,9 +88,9 @@ docker compose -f "$COMPOSE_FILE" build \
 short_hash="$(git -C "$REPO_ROOT" rev-parse --short HEAD)"
 TAG="${new_version}_${short_hash}"
 
-docker tag insure-copilot-BE:latest     "insure-copilot-BE:${TAG}"
-docker tag insure-copilot-FE:latest     "insure-copilot-FE:${TAG}"
-docker tag insure-copilot-WORKER:latest "insure-copilot-WORKER:${TAG}"
+docker tag insure-copilot-be:latest     "insure-copilot-be:${TAG}"
+docker tag insure-copilot-fe:latest     "insure-copilot-fe:${TAG}"
+docker tag insure-copilot-worker:latest "insure-copilot-worker:${TAG}"
 
 echo "Images tagged: $TAG"
 docker images --format "{{.Repository}}:{{.Tag}}" | grep "insure-copilot" | grep "$new_version"
