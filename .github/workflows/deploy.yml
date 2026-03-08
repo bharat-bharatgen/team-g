@@ -29,7 +29,7 @@ jobs:
 
       - name: Show current version
         run: |
-          current=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "0.0.0")
+          current=$(git describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")
           echo "Current version: $current — will bump ${{ github.event.inputs.bump }}"
 
       - name: Make build script executable
@@ -40,6 +40,6 @@ jobs:
 
       - name: Create and push git tag
         run: |
-          VERSION=$(cat VERSION)
-          git tag "v${VERSION}"
-          git push origin "v${VERSION}"
+          VERSION=$(cat .deployed_version)
+          git tag "${VERSION}"
+          git push origin "${VERSION}"

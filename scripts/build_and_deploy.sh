@@ -23,13 +23,13 @@ COMPOSE_FILE="$REPO_ROOT/docker-compose.yml"
 # --------------------------------------------------------------------------
 BUMP="${1:-patch}"   # patch | minor | major
 
-# Get latest tag (strip leading 'v'). Fall back to 0.0.0 if no tags exist.
-current="$(git -C "$REPO_ROOT" describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "0.0.0")"
+# Get latest tag. Fall back to 0.0.0 if no tags exist.
+current="$(git -C "$REPO_ROOT" describe --tags --abbrev=0 2>/dev/null || echo "0.0.0")"
 IFS='.' read -r major minor patch <<< "$current"
 
 # Validate that version components are integers
 if ! [[ "$major" =~ ^[0-9]+$ ]] || ! [[ "$minor" =~ ^[0-9]+$ ]] || ! [[ "$patch" =~ ^[0-9]+$ ]]; then
-  echo "ERROR: Latest git tag '$current' is not a valid version. Expected format: vX.Y.Z"
+  echo "ERROR: Latest git tag '$current' is not a valid version. Expected format: X.Y.Z"
   exit 1
 fi
 
@@ -130,6 +130,9 @@ done
 
 # Disable rollback trap — deploy succeeded
 trap - ERR
+
+# Write new version to .deployed_version for CI to pick up and create git tag
+echo "$new_version" > "$REPO_ROOT/.deployed_version"
 
 echo ""
 echo "Deploy complete. Version: $new_version  Tag: $TAG"
