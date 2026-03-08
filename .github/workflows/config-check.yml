@@ -2,20 +2,21 @@ name: Config integrity check
 
 on:
   push:
-    branches: [main, master]
+    branches:
+      - main
+      - master
     paths:
-      - 'backend/app/config.py'
-      - 'backend/app/services/storage.py'
-      - 'backend/app/main.py'
-      - 'backend/app/services/llm/client.py'
-      - '.github/workflows/config-check.yml'
+      - "backend/app/config.py"
+      - "backend/app/services/storage.py"
+      - "backend/app/main.py"
+      - "backend/app/services/llm/client.py"
+      - ".github/workflows/config-check.yml"
   pull_request:
     paths:
-      - 'backend/app/config.py'
-      - 'backend/app/services/storage.py'
-      - 'backend/app/main.py'
-      - 'backend/app/services/llm/client.py'
-      - '.github/workflows/config-check.yml'
+      - "backend/app/config.py"
+      - "backend/app/services/storage.py"
+      - "backend/app/main.py"
+      - "backend/app/services/llm/client.py"
   workflow_dispatch:
 
 jobs:
@@ -25,13 +26,17 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Check s3_endpoint_url in config.py
-        run: grep -q "s3_endpoint_url" backend/app/config.py || (echo "ERROR: s3_endpoint_url missing from config.py" && exit 1)
+        run: |
+          grep -q "s3_endpoint_url" backend/app/config.py || (echo "ERROR: s3_endpoint_url missing from config.py" && exit 1)
 
       - name: Check endpoint_url in storage.py
-        run: grep -q "endpoint_url" backend/app/services/storage.py || (echo "ERROR: endpoint_url missing from storage.py (MinIO support broken)" && exit 1)
+        run: |
+          grep -q "endpoint_url" backend/app/services/storage.py || (echo "ERROR: endpoint_url missing from storage.py" && exit 1)
 
-      - name: Check CORS_ORIGINS env var in main.py
-        run: grep -q "CORS_ORIGINS" backend/app/main.py || (echo "ERROR: CORS_ORIGINS env var missing from main.py (CORS hardcoded)" && exit 1)
+      - name: Check CORS_ORIGINS in main.py
+        run: |
+          grep -q "CORS_ORIGINS" backend/app/main.py || (echo "ERROR: CORS_ORIGINS hardcoded in main.py" && exit 1)
 
-      - name: Check /chat/completions appended in llm/client.py
-        run: grep -q "chat/completions" backend/app/services/llm/client.py || (echo "ERROR: /chat/completions auto-append missing from llm/client.py" && exit 1)
+      - name: Check chat/completions in llm/client.py
+        run: |
+          grep -q "chat/completions" backend/app/services/llm/client.py || (echo "ERROR: /chat/completions auto-append missing" && exit 1)
