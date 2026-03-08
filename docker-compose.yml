@@ -34,7 +34,7 @@ services:
       - bharat-network
     mem_limit: 4g
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:48000/health"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:48000/health')"]
       interval: 30s
       timeout: 10s
       retries: 3

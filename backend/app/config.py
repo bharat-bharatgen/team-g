@@ -5,11 +5,12 @@ class Settings(BaseSettings):
     mongodb_url: str = "mongodb://localhost:27017"
     mongodb_db_name: str = "insurance_copilot"
      
-    # AWS S3
+    # AWS S3 / MinIO
     aws_access_key_id: str
     aws_secret_access_key: str
     aws_region: str = "us-east-1"
     s3_bucket_name: str
+    s3_endpoint_url: str = ""
     s3_upload_url_expiry: int = 900  # 15 minutes
     s3_download_url_expiry: int = 1800  # 30 minutes
     

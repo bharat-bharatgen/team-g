@@ -26,9 +26,9 @@ async def get_upload_urls(case_id: str, body: UploadUrlRequest, user: dict = Dep
     if not case:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Case not found")
 
-    # Reject if document type already has files
+    # Reject if document type already has uploaded files
     existing = case.get("documents", {}).get(body.document_type.value, [])
-    if existing:
+    if any(f.get("status") == FileStatus.UPLOADED.value for f in existing):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"{body.document_type.value} files already exist. Delete them first.",

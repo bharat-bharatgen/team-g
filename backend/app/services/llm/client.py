@@ -120,6 +120,8 @@ async def call(
         The LLM response text.
     """
     base_url = (config.base_url or settings.llm_api_base_url).rstrip("/")
+    if not base_url.endswith("/chat/completions"):
+        base_url = f"{base_url}/chat/completions"
     api_key = config.api_key or settings.llm_api_key
     model = config.model
 
