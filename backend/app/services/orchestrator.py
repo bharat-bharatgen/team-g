@@ -86,7 +86,7 @@ async def _run_mer(case_id: str, mer_files: List[dict]) -> Dict[str, Any]:
             case_id, "mer", "failed",
             error_message=str(e), error_traceback=traceback.format_exc(),
         )
-        return {"pipeline": "mer", "status": "failed", "error": str(e), "traceback": traceback.format_exc()}
+        raise
 
 
 async def _run_pathology(case_id: str, path_files: List[dict]) -> Dict[str, Any]:
@@ -111,7 +111,7 @@ async def _run_pathology(case_id: str, path_files: List[dict]) -> Dict[str, Any]
             case_id, "pathology", "failed",
             error_message=str(e), error_traceback=traceback.format_exc(),
         )
-        return {"pipeline": "pathology", "status": "failed", "error": str(e), "traceback": traceback.format_exc()}
+        raise
 
 
 async def _run_face_match(case_id: str, photo_files: List[dict], id_files: List[dict]) -> Dict[str, Any]:
@@ -127,7 +127,7 @@ async def _run_face_match(case_id: str, photo_files: List[dict], id_files: List[
             case_id, "face_match", "failed",
             error_message=str(e), error_traceback=traceback.format_exc(),
         )
-        return {"pipeline": "face_match", "status": "failed", "error": str(e), "traceback": traceback.format_exc()}
+        raise
 
 
 async def _run_location_check(
@@ -146,7 +146,7 @@ async def _run_location_check(
             case_id, "location_check", "failed",
             error_message=str(e), error_traceback=traceback.format_exc(),
         )
-        return {"pipeline": "location_check", "status": "failed", "error": str(e), "traceback": traceback.format_exc()}
+        raise
 
 
 async def _run_risk(case_id: str) -> Dict[str, Any]:
@@ -162,7 +162,7 @@ async def _run_risk(case_id: str) -> Dict[str, Any]:
             error_message=str(e), error_traceback=traceback.format_exc(),
         )
         logger.error(f"Risk analysis failed for case {case_id}: {e}")
-        return {"pipeline": "risk", "status": "failed", "error": str(e), "traceback": traceback.format_exc()}
+        raise
 
 
 async def _maybe_trigger_risk(case_id: str):
@@ -257,7 +257,7 @@ async def _run_test_verification(case_id: str) -> Dict[str, Any]:
             error_message=str(e), error_traceback=traceback.format_exc(),
         )
         logger.error(f"Test verification failed for case {case_id}: {e}")
-        return {"pipeline": "test_verification", "status": "failed", "error": str(e)}
+        raise
 
 
 async def _maybe_trigger_test_verification(case_id: str):

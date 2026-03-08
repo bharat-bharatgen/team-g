@@ -18,6 +18,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    image: insure-copilot-BE
     container_name: insure-copilot-BE
     restart: unless-stopped
     env_file:
@@ -44,6 +45,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    image: insure-copilot-WORKER
     container_name: insure-copilot-WORKER
     restart: unless-stopped
     env_file:
@@ -65,6 +67,7 @@ services:
       args:
         VITE_API_BASE_URL: /api/v1
         VITE_APP_NAME: InsureCopilot
+    image: insure-copilot-FE
     container_name: insure-copilot-FE
     restart: unless-stopped
     ports:

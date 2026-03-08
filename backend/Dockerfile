@@ -17,6 +17,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY ./app ./app
 
+# Version baked in at build time
+ARG APP_VERSION=dev
+ENV APP_VERSION=${APP_VERSION}
+
 # Expose port
 EXPOSE 8000
 

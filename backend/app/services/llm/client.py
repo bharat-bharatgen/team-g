@@ -197,8 +197,8 @@ async def call(
                     if attempt < MAX_RETRIES - 1:
                         delay = min(RETRY_BASE_DELAY * (2 ** attempt), RETRY_MAX_DELAY)
                         logger.warning(
-                            "LLM request failed (attempt %s/%s): %s; retrying in %.1fs",
-                            attempt + 1, MAX_RETRIES, e, delay,
+                            "LLM request failed (attempt %s/%s): %s [type=%s url=%s]; retrying in %.1fs",
+                            attempt + 1, MAX_RETRIES, e, type(e).__name__, base_url, delay,
                         )
                         await asyncio.sleep(delay)
                     else:
