@@ -141,9 +141,21 @@ async def worker_loop():
         in_flight.add(t)
 
 
+async def recover_orphaned_tasks():
+    """Reset tasks stuck in 'processing' from a previous worker crash/restart."""
+    db = await get_database()
+    result = await db.tasks.update_many(
+        {"status": "processing"},
+        {"$set": {"status": "pending", "started_at": None}},
+    )
+    if result.modified_count:
+        logger.warning("Recovered %d orphaned task(s) stuck in 'processing'", result.modified_count)
+
+
 async def main():
     await connect_to_mongo()
     await ensure_indexes()
+    await recover_orphaned_tasks()
     try:
         await worker_loop()
     finally:
