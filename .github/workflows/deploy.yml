@@ -15,6 +15,9 @@ on:
 
 run-name: "Deploy · ${{ github.event.inputs.bump }} bump · by @${{ github.actor }}"
 
+permissions:
+  contents: write
+
 jobs:
   deploy:
     name: Build, tag, and deploy
