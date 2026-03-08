@@ -1,12 +1,17 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { Button } from '@/components/ui/button';
 import { LogOut, User } from 'lucide-react';
 import { formatPhoneNumber } from '@/utils/formatters';
-
 export const Navbar = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/health').then((r) => r.json()).then((d) => setAppVersion(d.version)).catch(() => {});
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -31,7 +36,7 @@ export const Navbar = () => {
                 InsureCopilot
               </span>
               <span className="text-[10px] text-muted-foreground leading-tight">
-                by BharatGen
+                by BharatGen{appVersion ? ` · ${appVersion}` : ''}
               </span>
             </div>
           </div>
