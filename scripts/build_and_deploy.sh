@@ -5,32 +5,31 @@
 # Usage (CI):     called by .github/workflows/deploy.yml on workflow_dispatch
 #
 # Steps:
-#   1. Validate VERSION file
+#   1. Read current version from latest git tag, compute new version
 #   2. Save previous images for rollback
-#   3. Build Docker images
-#   4. Bump VERSION (after successful build, so tag hash matches deployed commit)
-#   5. Tag built images as <version>_<short-commit-hash>
-#   6. Deploy with docker compose
-#   7. Health check — verify backend is up
+#   3. Build Docker images with APP_VERSION baked in
+#   4. Tag built images as <version>_<short-commit-hash>
+#   5. Deploy with docker compose
+#   6. Health check — verify backend is up
 #   Rollback: if any step fails, restore previous images and restart
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION_FILE="$REPO_ROOT/VERSION"
 COMPOSE_FILE="$REPO_ROOT/docker-compose.yml"
 
 # --------------------------------------------------------------------------
-# 1. Validate VERSION and compute new version (don't write yet)
+# 1. Read current version from latest git tag, compute new version
 # --------------------------------------------------------------------------
 BUMP="${1:-patch}"   # patch | minor | major
 
-current="$(cat "$VERSION_FILE" | tr -d '[:space:]')"
+# Get latest tag (strip leading 'v'). Fall back to 0.0.0 if no tags exist.
+current="$(git -C "$REPO_ROOT" describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "0.0.0")"
 IFS='.' read -r major minor patch <<< "$current"
 
 # Validate that version components are integers
 if ! [[ "$major" =~ ^[0-9]+$ ]] || ! [[ "$minor" =~ ^[0-9]+$ ]] || ! [[ "$patch" =~ ^[0-9]+$ ]]; then
-  echo "ERROR: VERSION file contains invalid version '$current'. Expected format: X.Y.Z"
+  echo "ERROR: Latest git tag '$current' is not a valid version. Expected format: vX.Y.Z"
   exit 1
 fi
 
@@ -58,9 +57,6 @@ rollback() {
   echo ""
   echo "ERROR: Deploy failed. Rolling back to previous images..."
 
-  # Restore VERSION file
-  echo "$current" > "$VERSION_FILE"
-
   # Retag previous images back to latest if they existed
   if [ -n "$prev_backend" ];  then docker tag "$prev_backend"  insure-copilot-BE:latest;     fi
   if [ -n "$prev_frontend" ]; then docker tag "$prev_frontend" insure-copilot-FE:latest;     fi
@@ -74,12 +70,12 @@ rollback() {
 trap rollback ERR
 
 # --------------------------------------------------------------------------
-# 3. Build images
+# 3. Build images with version baked in
 # --------------------------------------------------------------------------
 VITE_API_BASE_URL="${VITE_API_BASE_URL:-/api/v1}"
 VITE_APP_NAME="${VITE_APP_NAME:-InsureCopilot}"
 
-echo "Building images (VITE_API_BASE_URL: $VITE_API_BASE_URL)..."
+echo "Building images (version: $new_version, VITE_API_BASE_URL: $VITE_API_BASE_URL)..."
 
 docker compose -f "$COMPOSE_FILE" build \
   --build-arg VITE_API_BASE_URL="$VITE_API_BASE_URL" \
@@ -87,13 +83,7 @@ docker compose -f "$COMPOSE_FILE" build \
   --build-arg APP_VERSION="$new_version"
 
 # --------------------------------------------------------------------------
-# 4. Write new version to VERSION file (git tag created by CI workflow)
-# --------------------------------------------------------------------------
-echo "$new_version" > "$VERSION_FILE"
-echo "Version bumped: $current → $new_version"
-
-# --------------------------------------------------------------------------
-# 5. Tag built images with versioned snapshot tag
+# 4. Tag built images with versioned snapshot tag
 # --------------------------------------------------------------------------
 short_hash="$(git -C "$REPO_ROOT" rev-parse --short HEAD)"
 TAG="${new_version}_${short_hash}"
@@ -106,7 +96,7 @@ echo "Images tagged: $TAG"
 docker images --format "{{.Repository}}:{{.Tag}}" | grep "insure-copilot" | grep "$new_version"
 
 # --------------------------------------------------------------------------
-# 6. Deploy
+# 5. Deploy
 # --------------------------------------------------------------------------
 echo "Deploying..."
 docker compose -f "$COMPOSE_FILE" up -d --no-build
@@ -116,7 +106,7 @@ echo "Running containers:"
 docker compose -f "$COMPOSE_FILE" ps
 
 # --------------------------------------------------------------------------
-# 7. Health check
+# 6. Health check
 # --------------------------------------------------------------------------
 echo ""
 echo "Waiting for backend health check..."
