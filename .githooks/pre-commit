@@ -1,0 +1,30 @@
+#!/bin/sh
+# Pre-commit hook: checks critical backend config integrity
+
+FAILED=0
+
+check() {
+    file="$1"
+    pattern="$2"
+    message="$3"
+
+    # Only check if the file is staged
+    if git diff --cached --name-only | grep -q "$file"; then
+        if ! git show ":$file" | grep -q "$pattern"; then
+            echo "ERROR: $message"
+            FAILED=1
+        fi
+    fi
+}
+
+check "backend/app/config.py"              "s3_endpoint_url"  "s3_endpoint_url missing from config.py (MinIO support broken)"
+check "backend/app/services/storage.py"    "endpoint_url"     "endpoint_url missing from storage.py (MinIO support broken)"
+check "backend/app/main.py"                "CORS_ORIGINS"     "CORS_ORIGINS env var missing from main.py (CORS is hardcoded)"
+check "backend/app/services/llm/client.py" "chat/completions" "/chat/completions auto-append missing from llm/client.py"
+
+if [ "$FAILED" = "1" ]; then
+    echo ""
+    echo "Pre-commit check failed. Fix the issues above before committing."
+    echo "See backend/.env.example for reference."
+    exit 1
+fi
