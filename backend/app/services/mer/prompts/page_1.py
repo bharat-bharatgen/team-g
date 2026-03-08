@@ -3,7 +3,6 @@ from app.services.llm.config import LLMCallConfig
 CONFIG = LLMCallConfig(
 #    base_url="http://10.67.18.3:8004/v1/chat/completions",
 #    model="Qwen/Qwen3-VL-8B-Instruct",
-    base_url="https://apps.bharatgen.dev/inference/v1/chat/completions",
     model="qwen3.5-27b",
     temperature=0.0,
     response_format="json_object",

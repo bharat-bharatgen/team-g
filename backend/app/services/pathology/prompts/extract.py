@@ -14,7 +14,6 @@ from app.services.pathology.config import NEW_PARAMS
 CONFIG = LLMCallConfig(
 #    base_url="http://10.67.18.3:8002/v1/chat/completions",
 #    model="Qwen/Qwen3-14B",
-    base_url="https://apps.bharatgen.dev/inference/v1/chat/completions",
     #model="qwen3-14b",
     model="gpt-oss-120b",
     temperature=0.0,
