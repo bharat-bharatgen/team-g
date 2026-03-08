@@ -83,10 +83,11 @@ echo "Building images (VITE_API_BASE_URL: $VITE_API_BASE_URL)..."
 
 docker compose -f "$COMPOSE_FILE" build \
   --build-arg VITE_API_BASE_URL="$VITE_API_BASE_URL" \
-  --build-arg VITE_APP_NAME="$VITE_APP_NAME"
+  --build-arg VITE_APP_NAME="$VITE_APP_NAME" \
+  --build-arg APP_VERSION="$new_version"
 
 # --------------------------------------------------------------------------
-# 4. Bump VERSION now — build succeeded, hash is stable
+# 4. Write new version to VERSION file (git tag created by CI workflow)
 # --------------------------------------------------------------------------
 echo "$new_version" > "$VERSION_FILE"
 echo "Version bumped: $current → $new_version"

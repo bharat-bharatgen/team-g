@@ -2,6 +2,18 @@ name: Build and Deploy
 
 on:
   workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+run-name: "Deploy · ${{ github.event.inputs.bump }} bump · by @${{ github.actor }}"
 
 jobs:
   deploy:
@@ -15,20 +27,22 @@ jobs:
           fetch-depth: 0        # needed for full commit hash
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Configure git identity (for VERSION commit)
+      - name: Configure git identity
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Show current version
+        run: echo "Current version $(cat VERSION) — will bump ${{ github.event.inputs.bump }}"
 
       - name: Make build script executable
         run: chmod +x scripts/build_and_deploy.sh
 
       - name: Run build and deploy
-        run: ./scripts/build_and_deploy.sh patch
+        run: ./scripts/build_and_deploy.sh ${{ github.event.inputs.bump }}
 
-      - name: Commit bumped VERSION back to main
+      - name: Create and push git tag
         run: |
           VERSION=$(cat VERSION)
-          git add VERSION
-          git diff --cached --quiet || git commit -m "ci: bump version to $VERSION [skip ci]"
-          git push
+          git tag "v${VERSION}"
+          git push origin "v${VERSION}"
