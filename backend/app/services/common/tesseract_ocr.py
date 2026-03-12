@@ -33,18 +33,33 @@ _pool_lock = Lock()
 _shutting_down = False
 
 
+def _is_pool_broken(pool: ProcessPoolExecutor | None) -> bool:
+    """Check if a ProcessPoolExecutor is broken (child process crashed)."""
+    return pool is not None and getattr(pool, "_broken", False)
+
+
 def _get_ocr_pool() -> ProcessPoolExecutor:
-    """Lazy-initialize the OCR process pool (thread-safe)."""
+    """Lazy-initialize the OCR process pool (thread-safe).
+
+    If the pool exists but is broken (a child process crashed), it is
+    replaced with a fresh one so that subsequent OCR calls can succeed.
+    """
     global _ocr_pool
-    if _ocr_pool is None:
+    if _ocr_pool is None or _is_pool_broken(_ocr_pool):
         with _pool_lock:
-            if _ocr_pool is None and not _shutting_down:
+            if _shutting_down:
+                raise RuntimeError("OCR pool is shut down")
+            if _ocr_pool is None or _is_pool_broken(_ocr_pool):
+                if _ocr_pool is not None:
+                    logger.warning("OCR process pool is broken — recreating")
+                    try:
+                        _ocr_pool.shutdown(wait=False)
+                    except Exception:
+                        pass
                 from app.config import settings
                 max_workers = settings.ocr_max_workers
                 _ocr_pool = ProcessPoolExecutor(max_workers=max_workers)
                 logger.info(f"OCR process pool initialized with {max_workers} workers")
-    if _ocr_pool is None:
-        raise RuntimeError("OCR pool is shut down")
     return _ocr_pool
 
 

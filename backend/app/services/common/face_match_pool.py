@@ -29,18 +29,33 @@ _pool_lock = Lock()
 _shutting_down = False
 
 
+def _is_pool_broken(pool: ProcessPoolExecutor | None) -> bool:
+    """Check if a ProcessPoolExecutor is broken (child process crashed)."""
+    return pool is not None and getattr(pool, "_broken", False)
+
+
 def _get_face_pool() -> ProcessPoolExecutor:
-    """Lazy-initialize the face match process pool (thread-safe)."""
+    """Lazy-initialize the face match process pool (thread-safe).
+
+    If the pool exists but is broken (a child process crashed), it is
+    replaced with a fresh one so that subsequent calls can succeed.
+    """
     global _face_pool
-    if _face_pool is None:
+    if _face_pool is None or _is_pool_broken(_face_pool):
         with _pool_lock:
-            if _face_pool is None and not _shutting_down:
+            if _shutting_down:
+                raise RuntimeError("Face match pool is shut down")
+            if _face_pool is None or _is_pool_broken(_face_pool):
+                if _face_pool is not None:
+                    logger.warning("Face match process pool is broken — recreating")
+                    try:
+                        _face_pool.shutdown(wait=False)
+                    except Exception:
+                        pass
                 from app.config import settings
                 max_workers = settings.face_match_max_workers
                 _face_pool = ProcessPoolExecutor(max_workers=max_workers)
                 logger.info(f"Face match process pool initialized with {max_workers} workers")
-    if _face_pool is None:
-        raise RuntimeError("Face match pool is shut down")
     return _face_pool
 
 
