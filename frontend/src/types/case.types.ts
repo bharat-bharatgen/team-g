@@ -430,6 +430,9 @@ export interface CaseDashboardSummary {
 export interface CaseDashboardResponse {
   cases: CaseDashboardSummary[];
   total: number;
+  filtered_total: number;
+  page: number;
+  page_size: number;
   awaiting_decision: number;
   decided: number;
   needs_attention_count: number;

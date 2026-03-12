@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CaseDashboardSummary, PipelineStatus } from '@/types/case.types';
 import { formatDate } from '@/utils/formatters';
-import { ChevronRight, AlertTriangle, Loader2, CheckCircle2, XCircle, HelpCircle, Minus, X } from 'lucide-react';
+import { ChevronRight, ChevronLeft, AlertTriangle, Loader2, CheckCircle2, XCircle, HelpCircle, Minus, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,10 @@ import { caseService } from '@/services/case.service';
 
 interface CaseListProps {
   cases: CaseDashboardSummary[];
+  page?: number;
+  totalCases?: number;
+  pageSize?: number;
+  onPageChange?: (page: number) => void;
   onCaseDeleted?: (caseId: string) => void;
 }
 
@@ -150,7 +154,7 @@ const StatusBadge = ({ decision, hasProcessing }: { decision?: string; hasProces
   );
 };
 
-export const CaseList = ({ cases, onCaseDeleted }: CaseListProps) => {
+export const CaseList = ({ cases, page = 1, totalCases, pageSize = 20, onPageChange, onCaseDeleted }: CaseListProps) => {
   const navigate = useNavigate();
   const [deleteTarget, setDeleteTarget] = useState<CaseDashboardSummary | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -304,6 +308,43 @@ export const CaseList = ({ cases, onCaseDeleted }: CaseListProps) => {
           );
         })}
       </div>
+
+      {/* Pagination controls */}
+      {totalCases !== undefined && totalCases > pageSize && onPageChange && (
+        (() => {
+          const totalPages = Math.ceil(totalCases / pageSize);
+          return (
+            <div className="flex items-center justify-between pt-4 border-t border-slate-200 mt-2">
+              <span className="text-sm text-slate-500">
+                Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, totalCases)} of {totalCases}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onPageChange(page - 1)}
+                  disabled={page <= 1}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Previous
+                </Button>
+                <span className="text-sm text-slate-600 px-2">
+                  Page {page} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onPageChange(page + 1)}
+                  disabled={page >= totalPages}
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
+            </div>
+          );
+        })()
+      )}
 
       {/* Delete confirmation dialog */}
       <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>

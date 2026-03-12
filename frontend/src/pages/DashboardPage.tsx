@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { caseService } from '@/services/case.service';
 import { CaseDashboardResponse, DashboardFilterType } from '@/types/case.types';
 import { StatsOverview } from '@/components/dashboard/StatsOverview';
@@ -18,6 +18,8 @@ const FILTER_OPTIONS: { value: DashboardFilterType; label: string }[] = [
   { value: 'attention', label: 'Needs Attention' },
 ];
 
+const PAGE_SIZE = 100;
+
 export const DashboardPage = () => {
   const navigate = useNavigate();
   
@@ -26,7 +28,9 @@ export const DashboardPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [filter, setFilter] = useState<DashboardFilterType>('all');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const page = Number(searchParams.get('page') || '1');
+  const filter = (searchParams.get('filter') || 'all') as DashboardFilterType;
   
   // New Case Modal State
   const [isNewCaseOpen, setIsNewCaseOpen] = useState(false);
@@ -34,11 +38,11 @@ export const DashboardPage = () => {
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
-  const fetchDashboard = async (currentFilter: DashboardFilterType = filter) => {
+  const fetchDashboard = async (currentFilter: DashboardFilterType = filter, currentPage: number = page) => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await caseService.getDashboard(currentFilter);
+      const response = await caseService.getDashboard(currentFilter, currentPage, PAGE_SIZE);
       setDashboardData(response);
     } catch (err: any) {
       console.error('Error fetching dashboard:', err);
@@ -50,13 +54,18 @@ export const DashboardPage = () => {
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await fetchDashboard(filter);
+    await fetchDashboard(filter, page);
     setIsRefreshing(false);
   };
 
   const handleFilterChange = async (newFilter: DashboardFilterType) => {
-    setFilter(newFilter);
-    await fetchDashboard(newFilter);
+    setSearchParams({ filter: newFilter, page: '1' });
+    await fetchDashboard(newFilter, 1);
+  };
+
+  const handlePageChange = async (newPage: number) => {
+    setSearchParams({ filter, page: String(newPage) });
+    await fetchDashboard(filter, newPage);
   };
 
   const handleCreateCase = async () => {
@@ -87,7 +96,7 @@ export const DashboardPage = () => {
   };
 
   useEffect(() => {
-    fetchDashboard();
+    fetchDashboard(filter, page);
   }, []);
 
   if (isLoading) {
@@ -160,24 +169,18 @@ export const DashboardPage = () => {
                 ))}
               </div>
             </div>
-            {dashboardData.cases.length === 0 ? (
+            {dashboardData.cases.length === 0 && dashboardData.filtered_total === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 No cases match the current filter.
               </div>
             ) : (
               <CaseList
                 cases={dashboardData.cases}
-                onCaseDeleted={(caseId) => {
-                  setDashboardData((prev) =>
-                    prev
-                      ? {
-                          ...prev,
-                          cases: prev.cases.filter((c) => c.id !== caseId),
-                          total: prev.total - 1,
-                        }
-                      : null
-                  );
-                }}
+                page={page}
+                totalCases={dashboardData.filtered_total}
+                pageSize={PAGE_SIZE}
+                onPageChange={handlePageChange}
+                onCaseDeleted={() => fetchDashboard(filter, page)}
               />
             )}
           </div>

@@ -59,9 +59,9 @@ export const caseService = {
     return response.data;
   },
 
-  getDashboard: async (filter: DashboardFilterType = 'all'): Promise<CaseDashboardResponse> => {
+  getDashboard: async (filter: DashboardFilterType = 'all', page = 1, pageSize = 20): Promise<CaseDashboardResponse> => {
     const response = await api.get<CaseDashboardResponse>('/cases/dashboard', {
-      params: { filter },
+      params: { filter, page, page_size: pageSize },
     });
     return response.data;
   },

@@ -219,6 +219,8 @@ class DashboardFilter(str, Enum):
 @router.get("/dashboard", response_model=CaseDashboardResponse)
 async def get_dashboard(
     filter: DashboardFilter = Query(DashboardFilter.ALL, description="Filter cases"),
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Cases per page"),
     user: dict = Depends(get_current_user),
 ):
     """
@@ -242,7 +244,7 @@ async def get_dashboard(
     db = await get_database()
 
     # 1. Fetch all cases for user (excluding soft-deleted)
-    cases = await db.cases.find({"user_id": user["id"], "is_deleted": {"$ne": True}}).sort("created_at", -1).to_list(100)
+    cases = await db.cases.find({"user_id": user["id"], "is_deleted": {"$ne": True}}).sort("created_at", -1).to_list(None)
 
     if not cases:
         return CaseDashboardResponse(
@@ -311,9 +313,17 @@ async def get_dashboard(
     else:
         filtered_summaries = all_summaries
 
+    # 8. Paginate
+    total_filtered = len(filtered_summaries)
+    start = (page - 1) * page_size
+    paginated = filtered_summaries[start:start + page_size]
+
     return CaseDashboardResponse(
-        cases=filtered_summaries,
+        cases=paginated,
         total=total,
+        filtered_total=total_filtered,
+        page=page,
+        page_size=page_size,
         awaiting_decision=awaiting_decision,
         decided=decided,
         needs_attention_count=needs_attention_count,

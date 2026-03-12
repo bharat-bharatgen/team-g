@@ -98,6 +98,10 @@ class CaseDashboardResponse(BaseModel):
     cases: List[CaseDashboardSummary]
     # Aggregate stats
     total: int
+    filtered_total: int = 0
+    # Pagination
+    page: int = 1
+    page_size: int = 20
     awaiting_decision: int
     decided: int
     needs_attention_count: int
