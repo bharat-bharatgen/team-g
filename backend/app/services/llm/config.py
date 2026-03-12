@@ -1,5 +1,8 @@
+import os
 from typing import Optional
 from pydantic import BaseModel
+
+_DEFAULT_TIMEOUT = int(os.environ.get("LLM_TIMEOUT", "480"))
 
 
 class LLMCallConfig(BaseModel):
@@ -8,7 +11,7 @@ class LLMCallConfig(BaseModel):
     api_key: Optional[str] = None       # override per-call
     temperature: float = 0.0
     response_format: str = "json_object"  # "text" or "json_object"
-    timeout: int = 240
+    timeout: int = _DEFAULT_TIMEOUT
     top_p: Optional[float] = 1       # nucleus sampling
     top_k: Optional[int] = 1         # top-k sampling
     seed: Optional[int] = 133        # for reproducibility
