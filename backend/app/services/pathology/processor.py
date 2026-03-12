@@ -130,10 +130,13 @@ async def _extract_page(page_num: int, text: str) -> Dict[str, Any]:
         images=None,
     )
 
-    try:
-        parsed = json.loads(llm_response)
-    except json.JSONDecodeError:
-        parsed = {"tests": [], "raw_response": llm_response}
+    if not llm_response:
+        parsed = {"tests": [], "raw_response": None}
+    else:
+        try:
+            parsed = json.loads(llm_response)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            parsed = {"tests": [], "raw_response": llm_response}
 
     return {"page_number": page_num, "result": parsed}
 
