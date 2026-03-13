@@ -173,7 +173,16 @@ async def call(
     counter = current_call_count.get()
     sem = _get_model_semaphore(config.model)
 
+    num_images = len(images) if images else 0
+    t_wait = time.monotonic()
+
     async with sem:
+        sem_wait = time.monotonic() - t_wait
+        if sem_wait > 1.0:
+            logger.info(
+                "LLM_SEM_WAIT,case_id=%s,task=%s,model=%s,wait_s=%.2f",
+                case_id, task, model, sem_wait,
+            )
         t0 = time.monotonic()
         async with httpx.AsyncClient(timeout=config.timeout) as http_client:
             for attempt in range(MAX_RETRIES):
@@ -189,22 +198,25 @@ async def call(
                     if counter is not None:
                         counter[0] += 1
                     logger.info(
-                        "LLM_CALL,case_id=%s,task=%s,model=%s,latency_s=%.2f,attempts=%s,status=success",
-                        case_id, task, model, time.monotonic() - t0, attempt + 1,
+                        "LLM_CALL,case_id=%s,task=%s,model=%s,latency_s=%.2f,attempts=%s,images=%s,status=success",
+                        case_id, task, model, time.monotonic() - t0, attempt + 1, num_images,
                     )
                     return content
                 except (httpx.RemoteProtocolError, httpx.ConnectError, httpx.TimeoutException) as e:
                     if attempt < MAX_RETRIES - 1:
                         delay = min(RETRY_BASE_DELAY * (2 ** attempt), RETRY_MAX_DELAY)
                         logger.warning(
-                            "LLM request failed (attempt %s/%s): %s [type=%s url=%s]; retrying in %.1fs",
-                            attempt + 1, MAX_RETRIES, e, type(e).__name__, base_url, delay,
+                            "LLM_RETRY,case_id=%s,task=%s,model=%s,attempt=%s/%s,elapsed_s=%.2f,timeout_s=%s,images=%s,error=%s,retry_in=%.1fs",
+                            case_id, task, model, attempt + 1, MAX_RETRIES,
+                            time.monotonic() - t0, config.timeout, num_images,
+                            type(e).__name__, delay,
                         )
                         await asyncio.sleep(delay)
                     else:
-                        logger.info(
-                            "LLM_CALL,case_id=%s,task=%s,model=%s,latency_s=%.2f,attempts=%s,status=error,error=%s",
-                            case_id, task, model, time.monotonic() - t0, attempt + 1, e,
+                        logger.error(
+                            "LLM_CALL,case_id=%s,task=%s,model=%s,latency_s=%.2f,attempts=%s,timeout_s=%s,images=%s,status=error,error=%s",
+                            case_id, task, model, time.monotonic() - t0, attempt + 1,
+                            config.timeout, num_images, e,
                         )
                         raise
                 except httpx.HTTPStatusError as e:
@@ -213,13 +225,15 @@ async def call(
                     if (status >= 500 or status == 429) and attempt < MAX_RETRIES - 1:
                         delay = min(RETRY_BASE_DELAY * (2 ** attempt), RETRY_MAX_DELAY)
                         logger.warning(
-                            "LLM request HTTP %s (attempt %s/%s); retrying in %.1fs body=%s",
-                            status, attempt + 1, MAX_RETRIES, delay, body,
+                            "LLM_RETRY,case_id=%s,task=%s,model=%s,attempt=%s/%s,elapsed_s=%.2f,images=%s,error=HTTP %s,retry_in=%.1fs,body=%s",
+                            case_id, task, model, attempt + 1, MAX_RETRIES,
+                            time.monotonic() - t0, num_images, status, delay, body,
                         )
                         await asyncio.sleep(delay)
                     else:
-                        logger.info(
-                            "LLM_CALL,case_id=%s,task=%s,model=%s,latency_s=%.2f,attempts=%s,status=error,error=HTTP %s,body=%s",
-                            case_id, task, model, time.monotonic() - t0, attempt + 1, status, body,
+                        logger.error(
+                            "LLM_CALL,case_id=%s,task=%s,model=%s,latency_s=%.2f,attempts=%s,images=%s,status=error,error=HTTP %s,body=%s",
+                            case_id, task, model, time.monotonic() - t0, attempt + 1,
+                            num_images, status, body,
                         )
                         raise
