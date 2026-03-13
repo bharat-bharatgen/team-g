@@ -58,7 +58,7 @@ services:
     networks:
       - insurecopilot-net
       - bharat-network
-    mem_limit: 4g
+    mem_limit: 32g
 
   frontend:
     build:
