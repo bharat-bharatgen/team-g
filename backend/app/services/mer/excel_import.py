@@ -128,6 +128,55 @@ def _build_updated_fields(
     return updated_fields
 
 
+def _sync_pages(prev_pages: dict, updated_fields: List[MERField]) -> dict:
+    """
+    Sync edited field values back into the pages dict so downstream
+    consumers (risk processor) see the updated data.
+
+    Pages structure: {page_num: {section: {field_key: {value/answer, ...}}}}
+
+    Handles nested fields where field.key contains " > " separators,
+    e.g. "10c) How much tobacco... > cigarettes_bidis_sticks_per_day"
+    maps to pages[page][section]["10c) How much tobacco..."]["cigarettes_bidis_sticks_per_day"].
+    """
+    import copy
+    pages = copy.deepcopy(prev_pages)
+
+    for field in updated_fields:
+        page_key = str(field.page)
+        page_data = pages.get(page_key)
+        if not isinstance(page_data, dict):
+            continue
+
+        section_data = page_data.get(field.section)
+        if not isinstance(section_data, dict):
+            continue
+
+        # Split key on " > " to handle nested structures
+        key_parts = field.key.split(" > ")
+
+        # Navigate to the target entry
+        entry = section_data
+        for part in key_parts:
+            if not isinstance(entry, dict):
+                entry = None
+                break
+            entry = entry.get(part)
+
+        if not isinstance(entry, dict):
+            continue
+
+        # Update the value in pages — pages use either "value" or "answer" key
+        if "answer" in entry:
+            entry["answer"] = field.answer
+            entry["details"] = field.details
+        elif "value" in entry:
+            entry["value"] = field.answer
+        entry["confidence"] = field.confidence if field.confidence is not None else 1.0
+
+    return pages
+
+
 def import_excel(
     file_bytes: bytes,
     prev_result: MERResultModel,
@@ -155,13 +204,16 @@ def import_excel(
     # Build updated fields
     updated_fields = _build_updated_fields(excel_rows, prev_result.fields)
 
+    # Sync edited values into pages so downstream consumers see updates
+    pages = _sync_pages(prev_result.pages, updated_fields)
+
     # Create new snapshot
     new_result = MERResultModel(
         case_id=prev_result.case_id,
         version=prev_result.version + 1,
         source="excel_import",
         classification=prev_result.classification,
-        pages=prev_result.pages,
+        pages=pages,
         fields=updated_fields,
         created_at=datetime.utcnow(),
     )
