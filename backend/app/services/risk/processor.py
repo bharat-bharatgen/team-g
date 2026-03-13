@@ -19,7 +19,7 @@ from bson import ObjectId
 from app.dependencies import get_database
 from app.models.risk_result import RiskResultModel
 from app.services.llm import client as llm_client
-from app.services.llm.context import current_case_id, current_task, current_call_count
+from app.services.llm.context import current_case_id, current_task, current_call_count, current_operation
 from app.services.risk.pre_processor import prepare_llm_input
 from app.services.risk.post_processor import post_process_response
 from app.services.risk.prompts.analysis import (
@@ -170,6 +170,7 @@ async def process_risk(case_id: str) -> Dict[str, Any]:
 
     # Step 3: Call LLM for analysis
     user_prompt = build_user_prompt(llm_input)
+    current_operation.set("analysis")
     logger.info(f"Calling LLM for risk analysis (model: {CONFIG.model})")
 
     t_llm = time.monotonic()
@@ -190,7 +191,7 @@ async def process_risk(case_id: str) -> Dict[str, Any]:
         llm_response = json.loads(llm_response_text)
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse LLM response as JSON: {e}")
-        logger.error(f"Raw response: {llm_response_text[:500]}")
+        logger.error("Raw response failed JSON parse (len=%d)", len(llm_response_text))
         raise ValueError(f"LLM returned invalid JSON: {e}")
 
     # Step 4: Post-process

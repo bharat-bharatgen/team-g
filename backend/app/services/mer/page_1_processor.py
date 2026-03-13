@@ -21,6 +21,7 @@ import pytesseract
 from PIL import Image
 
 from app.services.llm import client as llm_client
+from app.services.llm.context import current_operation
 from app.services.mer.prompts import page_1_header, page_1_questions
 
 logger = logging.getLogger("mer_page1_processor")
@@ -235,11 +236,12 @@ def crop_questions_section(image_bytes: bytes) -> bytes:
 
 async def _extract_header(image_bytes: bytes) -> dict:
     """Extract header fields from cropped header image."""
+    current_operation.set("header")
     cropped = crop_header_section(image_bytes)
-    
+
     # Save debug image if enabled
     _save_debug_image(cropped, "header")
-    
+
     response = await llm_client.call(
         system_prompt=page_1_header.SYSTEM_PROMPT,
         user_prompt=page_1_header.USER_PROMPT,
@@ -256,11 +258,12 @@ async def _extract_header(image_bytes: bytes) -> dict:
 
 async def _extract_questions(image_bytes: bytes) -> dict:
     """Extract question answers from cropped questions image."""
+    current_operation.set("questions")
     cropped = crop_questions_section(image_bytes)
-    
+
     # Save debug image if enabled
     _save_debug_image(cropped, "questions")
-    
+
     response = await llm_client.call(
         system_prompt=page_1_questions.SYSTEM_PROMPT,
         user_prompt=page_1_questions.USER_PROMPT,
@@ -283,10 +286,11 @@ async def _extract_full_page(image_bytes: bytes) -> dict:
     Used when no anchors are found to ensure no data is lost.
     """
     from app.services.mer.prompts import page_1 as page_1_original
-    
+
+    current_operation.set("full")
     logger.info("Fallback: Processing Page 1 with full page (no anchors found)")
     _save_debug_image(image_bytes, "fullpage_fallback")
-    
+
     response = await llm_client.call(
         system_prompt=page_1_original.SYSTEM_PROMPT,
         user_prompt=page_1_original.USER_PROMPT,
@@ -367,9 +371,10 @@ async def extract_page_1(image_bytes: bytes, use_split: Optional[bool] = None) -
     else:
         # Fall back to original method - import here to avoid circular imports
         from app.services.mer.prompts import page_1 as page_1_original
-        
+
+        current_operation.set("full")
         logger.info("Processing Page 1 with original single-call method")
-        
+
         response = await llm_client.call(
             system_prompt=page_1_original.SYSTEM_PROMPT,
             user_prompt=page_1_original.USER_PROMPT,

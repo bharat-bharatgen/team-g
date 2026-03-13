@@ -14,7 +14,7 @@ from rapidfuzz import fuzz
 logger = logging.getLogger(__name__)
 
 from app.services.llm import client as llm_client
-from app.services.llm.context import current_case_id, current_task, current_call_count
+from app.services.llm.context import current_case_id, current_task, current_call_count, current_page_info, current_operation
 from app.services.test_verification.config import (
     PAGE_5_IDENTIFIERS,
     normalize_category,
@@ -281,6 +281,8 @@ async def extract_requirements_for_case(
             await _update_pipeline_status(case_id, "extracted")
             return {"_id": doc_id, **result.model_dump()}
 
+        current_page_info.set(str(requirements_page["page_number"]))
+        current_operation.set("extract_requirements")
         t_llm = time.monotonic()
         extracted = await extract_requirements(requirements_page["image_bytes"])
         llm_wall = time.monotonic() - t_llm

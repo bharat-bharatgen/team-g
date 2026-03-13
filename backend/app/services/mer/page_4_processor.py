@@ -26,6 +26,7 @@ import pytesseract
 from PIL import Image
 
 from app.services.llm import client as llm_client
+from app.services.llm.context import current_operation
 from app.services.mer.prompts import page_4_physical, page_4_systemic, page_4_certificate
 
 logger = logging.getLogger("mer_page4_processor")
@@ -247,9 +248,10 @@ def crop_certificate_section(image_bytes: bytes) -> bytes:
 
 async def _extract_physical(image_bytes: bytes) -> dict:
     """Extract physical measurements and BP from cropped section."""
+    current_operation.set("physical")
     cropped = crop_physical_section(image_bytes)
     _save_debug_image(cropped, "physical")
-    
+
     response = await llm_client.call(
         system_prompt=page_4_physical.SYSTEM_PROMPT,
         user_prompt=page_4_physical.USER_PROMPT,
@@ -266,9 +268,10 @@ async def _extract_physical(image_bytes: bytes) -> dict:
 
 async def _extract_systemic(image_bytes: bytes) -> dict:
     """Extract systemic examination Y/N questions from cropped section."""
+    current_operation.set("systemic")
     cropped = crop_systemic_section(image_bytes)
     _save_debug_image(cropped, "systemic")
-    
+
     response = await llm_client.call(
         system_prompt=page_4_systemic.SYSTEM_PROMPT,
         user_prompt=page_4_systemic.USER_PROMPT,
@@ -285,9 +288,10 @@ async def _extract_systemic(image_bytes: bytes) -> dict:
 
 async def _extract_certificate(image_bytes: bytes) -> dict:
     """Extract certificate/doctor details from cropped section."""
+    current_operation.set("certificate")
     cropped = crop_certificate_section(image_bytes)
     _save_debug_image(cropped, "certificate")
-    
+
     response = await llm_client.call(
         system_prompt=page_4_certificate.SYSTEM_PROMPT,
         user_prompt=page_4_certificate.USER_PROMPT,
@@ -310,10 +314,11 @@ async def _extract_full_page(image_bytes: bytes) -> dict:
     Used when no anchors are found to ensure no data is lost.
     """
     from app.services.mer.prompts import page_4 as page_4_original
-    
+
+    current_operation.set("full")
     logger.info("Fallback: Processing Page 4 with full page (no anchors found)")
     _save_debug_image(image_bytes, "fullpage_fallback")
-    
+
     response = await llm_client.call(
         system_prompt=page_4_original.SYSTEM_PROMPT,
         user_prompt=page_4_original.USER_PROMPT,
@@ -403,9 +408,10 @@ async def extract_page_4(image_bytes: bytes, use_split: Optional[bool] = None) -
     else:
         # Use original single-call method
         from app.services.mer.prompts import page_4 as page_4_original
-        
+
+        current_operation.set("full")
         logger.info("Processing Page 4 with original single-call method")
-        
+
         response = await llm_client.call(
             system_prompt=page_4_original.SYSTEM_PROMPT,
             user_prompt=page_4_original.USER_PROMPT,

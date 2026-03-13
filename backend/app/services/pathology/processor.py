@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional
 from app.services.storage import s3_service
 from app.services.common.tesseract_ocr import pdf_to_page_images
 from app.services.llm import client as llm_client
-from app.services.llm.context import current_case_id, current_task, current_call_count
+from app.services.llm.context import current_case_id, current_task, current_call_count, current_page_info, current_operation
 
 logger = logging.getLogger(__name__)
 from app.services.pathology.prompts import ocr as ocr_prompt
@@ -81,6 +81,8 @@ def _files_to_page_images(downloaded: List[dict]) -> List[dict]:
 async def _ocr_page(page: dict) -> dict:
     """Run LLM vision OCR on a single page image. Returns raw text."""
     page_num = page["page_number"]
+    current_page_info.set(str(page_num))
+    current_operation.set("ocr")
     user_prompt = ocr_prompt.build_user_prompt(page_num)
 
     llm_response = await llm_client.call(
@@ -121,6 +123,8 @@ async def _extract_page(page_num: int, text: str) -> Dict[str, Any]:
     if not text or not text.strip():
         return {"page_number": page_num, "result": {"tests": []}}
 
+    current_page_info.set(str(page_num))
+    current_operation.set("extract")
     user_prompt = extract_prompt.build_user_prompt(text)
 
     llm_response = await llm_client.call(

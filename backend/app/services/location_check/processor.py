@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 from app.services.storage import s3_service
 from app.services.common.tesseract_ocr import normalize_to_image
 from app.services.llm import client as llm_client
-from app.services.llm.context import current_case_id, current_task, current_call_count
+from app.services.llm.context import current_case_id, current_task, current_call_count, current_operation
 from app.services.location_check.prompts import photo_geo as photo_prompt
 from app.services.location_check.prompts import id_address as id_prompt
 from app.services.location_check.lab_address import get_lab_address
@@ -59,6 +59,7 @@ async def _extract_photo_geo(image_bytes: bytes) -> LocationSource:
     2. Address/pincode - fallback, geocoded to coordinates
     """
     try:
+        current_operation.set("photo_geo")
         llm_response = await llm_client.call(
             system_prompt=photo_prompt.SYSTEM_PROMPT,
             user_prompt=photo_prompt.build_user_prompt(),
@@ -128,6 +129,7 @@ async def _extract_photo_geo(image_bytes: bytes) -> LocationSource:
 async def _extract_id_address(image_bytes: bytes) -> LocationSource:
     """Extract address from ID card using LLM vision, then geocode."""
     try:
+        current_operation.set("id_address")
         llm_response = await llm_client.call(
             system_prompt=id_prompt.SYSTEM_PROMPT,
             user_prompt=id_prompt.build_user_prompt(),

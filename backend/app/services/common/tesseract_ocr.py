@@ -10,6 +10,7 @@ from PIL import Image
 import pytesseract
 import fitz  # PyMuPDF
 import warnings
+from app.services.llm.context import current_case_id
 
 Image.MAX_IMAGE_PIXELS = None
 warnings.simplefilter('ignore', Image.DecompressionBombWarning)
@@ -107,6 +108,11 @@ def pdf_to_page_images(pdf_bytes: bytes) -> list[dict]:
     """
     with _fitz_lock:
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        case_id = current_case_id.get()
+        logger.info(
+            "PDF_RENDER,case_id=%s,total_pages=%d,pdf_size_kb=%.1f",
+            case_id, len(doc), len(pdf_bytes) / 1024,
+        )
         pages = []
         for page_num in range(len(doc)):
             page = doc[page_num]
@@ -120,12 +126,15 @@ def pdf_to_page_images(pdf_bytes: bytes) -> list[dict]:
                 scale = (_MAX_PIXELS / total_px) ** 0.5
                 dpi = int(dpi * scale)
                 logger.info(
-                    "Page %d too large (%.0fM px at 300 DPI) — "
-                    "reducing to %d DPI",
-                    page_num + 1, total_px / 1e6, dpi,
+                    "PDF_RENDER_DOWNSCALE,case_id=%s,page=%d,original_px=%.0fM,dpi=%d",
+                    case_id, page_num + 1, total_px / 1e6, dpi,
                 )
             pix = page.get_pixmap(dpi=dpi)
             img_bytes = pix.tobytes("png")
+            logger.info(
+                "PDF_PAGE,case_id=%s,page=%d,dpi=%d,size_kb=%.1f",
+                case_id, page_num + 1, dpi, len(img_bytes) / 1024,
+            )
             pages.append({
                 "page_number": page_num + 1,
                 "image_bytes": img_bytes,

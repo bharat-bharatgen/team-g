@@ -50,7 +50,7 @@ async def _geocode_address_rest(address: str) -> Optional[Tuple[float, float]]:
             "address": address,
             "key": GOOGLE_MAPS_API_KEY,
         }
-        logger.info(f"[geocoder:rest] Geocoding: {address}")
+        logger.info("[geocoder:rest] Geocoding address (len=%d)", len(address))
 
         response = await asyncio.to_thread(
             requests.get, GEOCODE_API_URL, params=params
@@ -60,13 +60,12 @@ async def _geocode_address_rest(address: str) -> Optional[Tuple[float, float]]:
         if data["status"] == "OK":
             location = data["results"][0]["geometry"]["location"]
             lat, lon = location["lat"], location["lng"]
-            formatted = data["results"][0].get("formatted_address", address)
-            logger.info(f"[geocoder:rest] Found: ({lat}, {lon}) - {formatted}")
+            logger.info("[geocoder:rest] Found coordinates")
             return (lat, lon)
         else:
-            logger.warning(f"[geocoder:rest] API status '{data['status']}' for: {address}")
+            logger.warning("[geocoder:rest] API status '%s'", data["status"])
     except Exception as e:
-        logger.error(f"[geocoder:rest] Error for '{address}': {e}")
+        logger.error("[geocoder:rest] Geocode error: %s", type(e).__name__)
 
     return None
 
@@ -87,18 +86,18 @@ async def _geocode_address_googlemaps(address: str) -> Optional[Tuple[float, flo
         client = _get_client()
         # Add India suffix for better results with Indian addresses
         query = f"{address}, India" if "india" not in address.lower() else address
-        logger.info(f"[geocoder:googlemaps] Geocoding: {query}")
+        logger.info("[geocoder:googlemaps] Geocoding address (len=%d)", len(query))
 
         results = await asyncio.to_thread(client.geocode, query)
         if results:
             location = results[0]["geometry"]["location"]
             lat, lon = location["lat"], location["lng"]
-            logger.info(f"[geocoder:googlemaps] Found: ({lat}, {lon})")
+            logger.info("[geocoder:googlemaps] Found coordinates")
             return (lat, lon)
         else:
-            logger.warning(f"[geocoder:googlemaps] No results for: {query}")
+            logger.warning("[geocoder:googlemaps] No results")
     except Exception as e:
-        logger.error(f"[geocoder:googlemaps] Error for '{address}': {e}")
+        logger.error("[geocoder:googlemaps] Geocode error: %s", type(e).__name__)
 
     return None
 
@@ -145,7 +144,7 @@ async def reverse_geocode(lat: float, lon: float) -> Optional[str]:
         if results:
             return results[0]["formatted_address"]
     except Exception as e:
-        logger.error(f"[geocoder] Reverse geocode error for ({lat}, {lon}): {e}")
+        logger.error("[geocoder] Reverse geocode error: %s", type(e).__name__)
 
     return None
 

@@ -25,6 +25,7 @@ import pytesseract
 from PIL import Image
 
 from app.services.llm import client as llm_client
+from app.services.llm.context import current_operation
 from app.services.mer.prompts import page_2_questions, page_2_alcohol
 
 logger = logging.getLogger("mer_page2_processor")
@@ -198,6 +199,7 @@ def crop_alcohol_section(image_bytes: bytes) -> bytes:
 
 async def _extract_questions(image_bytes: bytes) -> dict:
     """Extract Y/N questions (3k through 9) from cropped section."""
+    current_operation.set("questions")
     cropped = crop_questions_section(image_bytes)
     _save_debug_image(cropped, "questions")
 
@@ -217,6 +219,7 @@ async def _extract_questions(image_bytes: bytes) -> dict:
 
 async def _extract_alcohol(image_bytes: bytes) -> dict:
     """Extract alcohol question + table from cropped section."""
+    current_operation.set("alcohol")
     cropped = crop_alcohol_section(image_bytes)
     _save_debug_image(cropped, "alcohol")
 
@@ -243,6 +246,7 @@ async def _extract_full_page(image_bytes: bytes) -> dict:
     """
     from app.services.mer.prompts import page_2 as page_2_original
 
+    current_operation.set("full")
     logger.info("Fallback: Processing Page 2 with full page (no anchors found)")
     _save_debug_image(image_bytes, "fullpage_fallback")
 
@@ -325,6 +329,7 @@ async def extract_page_2(image_bytes: bytes, use_split: Optional[bool] = None) -
     else:
         from app.services.mer.prompts import page_2 as page_2_original
 
+        current_operation.set("full")
         logger.info("Processing Page 2 with original single-call method")
 
         response = await llm_client.call(

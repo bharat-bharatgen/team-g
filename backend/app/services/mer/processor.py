@@ -9,7 +9,7 @@ from app.services.storage import s3_service
 from app.services.common.tesseract_ocr import extract_from_file
 from app.services.mer.page_classifier import classify_pages
 from app.services.llm import client as llm_client
-from app.services.llm.context import current_case_id, current_task, current_call_count
+from app.services.llm.context import current_case_id, current_task, current_call_count, current_page_info, current_operation
 from app.services.mer.flattener import flatten_all_pages
 from app.models.mer_result import MERResultModel
 from app.dependencies import get_database
@@ -88,6 +88,7 @@ async def _ocr_all(downloaded: List[dict]) -> List[dict]:
 async def _llm_extract_page(mer_page_num: int, match_info: dict) -> Optional[dict]:
     """Run LLM extraction for a single matched MER page."""
     page = match_info["page"]
+    current_page_info.set(str(page["page_number"]))
 
     # Special handling for Page 1 - use split processor for better accuracy
     if mer_page_num == 1:
@@ -138,6 +139,7 @@ async def _llm_extract_page(mer_page_num: int, match_info: dict) -> Optional[dic
     if not prompt_module:
         return None
 
+    current_operation.set("full")
     llm_response = await llm_client.call(
         system_prompt=prompt_module.SYSTEM_PROMPT,
         user_prompt=prompt_module.USER_PROMPT,

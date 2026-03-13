@@ -26,6 +26,7 @@ import pytesseract
 from PIL import Image
 
 from app.services.llm import client as llm_client
+from app.services.llm.context import current_operation
 from app.services.mer.prompts import page_3_questions, page_3_family, page_3_declaration
 
 logger = logging.getLogger("mer_page3_processor")
@@ -240,9 +241,10 @@ def crop_declaration_section(image_bytes: bytes) -> bytes:
 
 async def _extract_questions(image_bytes: bytes) -> dict:
     """Extract Y/N questions (10b, 10c, 11a-d) from cropped section."""
+    current_operation.set("questions")
     cropped = crop_questions_section(image_bytes)
     _save_debug_image(cropped, "questions")
-    
+
     response = await llm_client.call(
         system_prompt=page_3_questions.SYSTEM_PROMPT,
         user_prompt=page_3_questions.USER_PROMPT,
@@ -259,9 +261,10 @@ async def _extract_questions(image_bytes: bytes) -> dict:
 
 async def _extract_family(image_bytes: bytes) -> dict:
     """Extract family history table from cropped section."""
+    current_operation.set("family")
     cropped = crop_family_section(image_bytes)
     _save_debug_image(cropped, "family")
-    
+
     response = await llm_client.call(
         system_prompt=page_3_family.SYSTEM_PROMPT,
         user_prompt=page_3_family.USER_PROMPT,
@@ -278,9 +281,10 @@ async def _extract_family(image_bytes: bytes) -> dict:
 
 async def _extract_declaration(image_bytes: bytes) -> dict:
     """Extract declaration section from cropped section."""
+    current_operation.set("declaration")
     cropped = crop_declaration_section(image_bytes)
     _save_debug_image(cropped, "declaration")
-    
+
     response = await llm_client.call(
         system_prompt=page_3_declaration.SYSTEM_PROMPT,
         user_prompt=page_3_declaration.USER_PROMPT,
@@ -303,10 +307,11 @@ async def _extract_full_page(image_bytes: bytes) -> dict:
     Used when no anchors are found to ensure no data is lost.
     """
     from app.services.mer.prompts import page_3 as page_3_original
-    
+
+    current_operation.set("full")
     logger.info("Fallback: Processing Page 3 with full page (no anchors found)")
     _save_debug_image(image_bytes, "fullpage_fallback")
-    
+
     response = await llm_client.call(
         system_prompt=page_3_original.SYSTEM_PROMPT,
         user_prompt=page_3_original.USER_PROMPT,
@@ -397,9 +402,10 @@ async def extract_page_3(image_bytes: bytes, use_split: Optional[bool] = None) -
     else:
         # Use original single-call method
         from app.services.mer.prompts import page_3 as page_3_original
-        
+
+        current_operation.set("full")
         logger.info("Processing Page 3 with original single-call method")
-        
+
         response = await llm_client.call(
             system_prompt=page_3_original.SYSTEM_PROMPT,
             user_prompt=page_3_original.USER_PROMPT,
