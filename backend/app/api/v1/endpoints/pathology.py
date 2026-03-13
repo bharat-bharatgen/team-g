@@ -252,6 +252,10 @@ async def import_pathology_excel(
         {"$set": {"pipeline_status.pathology": "reviewed"}},
     )
 
+    # Re-trigger downstream pipelines (risk, test verification, location check)
+    from app.services.orchestrator import trigger_downstream_after_edit
+    await trigger_downstream_after_edit(case_id, "pathology")
+
     # Count changed fields
     changed = sum(1 for f in new_result.fields if f.source == "user")
 

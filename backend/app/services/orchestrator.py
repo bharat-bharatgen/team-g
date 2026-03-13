@@ -444,6 +444,166 @@ async def _is_risk_stale(case_id: str) -> bool:
     return False
 
 
+async def _is_test_verification_stale(case_id: str) -> bool:
+    """
+    Check if test verification used older MER/pathology versions than currently available.
+
+    Returns True if test verification should re-run because inputs were updated.
+    """
+    db = await get_database()
+
+    tv = await db.test_verification_results.find_one(
+        {"case_id": case_id},
+        sort=[("version", -1)],
+        projection={"mer_result_version": 1, "pathology_result_version": 1},
+    )
+    if not tv:
+        return False
+
+    mer = await db.mer_results.find_one(
+        {"case_id": case_id},
+        sort=[("version", -1)],
+        projection={"version": 1},
+    )
+    path = await db.pathology_results.find_one(
+        {"case_id": case_id},
+        sort=[("version", -1)],
+        projection={"version": 1},
+    )
+
+    latest_mer = mer.get("version") if mer else None
+    latest_path = path.get("version") if path else None
+
+    tv_mer = tv.get("mer_result_version")
+    tv_path = tv.get("pathology_result_version")
+
+    mer_stale = latest_mer is not None and latest_mer != tv_mer
+    path_stale = latest_path is not None and latest_path != tv_path
+
+    if mer_stale or path_stale:
+        logger.info(
+            f"Test verification is stale for case {case_id}: "
+            f"MER v{tv_mer}→v{latest_mer}, Path v{tv_path}→v{latest_path}"
+        )
+        return True
+
+    return False
+
+
+async def _is_location_check_stale(case_id: str) -> bool:
+    """
+    Check if location check used an older pathology version than currently available.
+
+    Returns True if location check should re-run because pathology was updated.
+    """
+    db = await get_database()
+
+    lc = await db.location_check_results.find_one(
+        {"case_id": case_id},
+        sort=[("version", -1)],
+        projection={"pathology_version": 1},
+    )
+    if not lc:
+        return False
+
+    path = await db.pathology_results.find_one(
+        {"case_id": case_id},
+        sort=[("version", -1)],
+        projection={"version": 1},
+    )
+
+    latest_path = path.get("version") if path else None
+    lc_path = lc.get("pathology_version")
+
+    if latest_path is not None and latest_path != lc_path:
+        logger.info(
+            f"Location check is stale for case {case_id}: "
+            f"Path v{lc_path}→v{latest_path}"
+        )
+        return True
+
+    return False
+
+
+# ─── Post-edit downstream re-trigger ─────────────────────────────────────────
+
+async def trigger_downstream_after_edit(case_id: str, edited_pipeline: str):
+    """
+    Re-trigger downstream pipelines after a user edits MER or pathology results.
+
+    Called from import-excel endpoints after saving the new versioned result.
+    Uses atomic MongoDB operations to prevent duplicate triggers.
+
+    Args:
+        case_id: The case ID
+        edited_pipeline: "mer" or "pathology"
+    """
+    db = await get_database()
+
+    # 1. Re-trigger risk analysis (both MER and pathology edits affect risk)
+    if await _is_risk_stale(case_id):
+        result = await db.cases.find_one_and_update(
+            {
+                "_id": ObjectId(case_id),
+                "pipeline_status.risk": {"$nin": ["processing"]},
+            },
+            {
+                "$set": {
+                    "pipeline_status.risk": "processing",
+                    "updated_at": datetime.utcnow(),
+                }
+            },
+            return_document=ReturnDocument.AFTER,
+        )
+        if result:
+            logger.info(f"Re-triggering risk analysis after {edited_pipeline} edit for case {case_id}")
+            await enqueue_task(case_id, "risk")
+        else:
+            logger.warning(f"Risk already processing for case {case_id}, skipping re-trigger after edit")
+
+    # 2. Re-trigger test verification (both MER and pathology edits affect it)
+    if await _is_test_verification_stale(case_id):
+        result = await db.cases.find_one_and_update(
+            {
+                "_id": ObjectId(case_id),
+                "pipeline_status.test_verification": {"$nin": ["processing"]},
+            },
+            {
+                "$set": {
+                    "pipeline_status.test_verification": "processing",
+                    "updated_at": datetime.utcnow(),
+                }
+            },
+            return_document=ReturnDocument.AFTER,
+        )
+        if result:
+            logger.info(f"Re-triggering test verification after {edited_pipeline} edit for case {case_id}")
+            await enqueue_task(case_id, "test_verification")
+        else:
+            logger.warning(f"Test verification already processing for case {case_id}, skipping re-trigger")
+
+    # 3. Re-trigger location check (only pathology edits affect lab address)
+    if edited_pipeline == "pathology" and await _is_location_check_stale(case_id):
+        result = await db.cases.find_one_and_update(
+            {
+                "_id": ObjectId(case_id),
+                "pipeline_status.location_check": {"$nin": ["processing"]},
+            },
+            {
+                "$set": {
+                    "pipeline_status.location_check": "processing",
+                    "updated_at": datetime.utcnow(),
+                }
+            },
+            return_document=ReturnDocument.AFTER,
+        )
+        if result:
+            logger.info(f"Re-triggering location check after pathology edit for case {case_id}")
+            await enqueue_task(case_id, "location_check")
+        else:
+            logger.warning(f"Location check already processing for case {case_id}, skipping re-trigger")
+
+
 # ─── Main orchestrator ───────────────────────────────────────────────────────
 
 async def get_pipelines_to_trigger(case_id: str, case: dict) -> tuple[List[str], List[str]]:

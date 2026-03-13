@@ -250,6 +250,10 @@ async def import_mer_excel(
         {"$set": {"pipeline_status.mer": "reviewed"}},
     )
 
+    # Re-trigger downstream pipelines (risk, test verification)
+    from app.services.orchestrator import trigger_downstream_after_edit
+    await trigger_downstream_after_edit(case_id, "mer")
+
     # Count changed fields
     changed = sum(1 for f in new_result.fields if f.source == "user")
 
