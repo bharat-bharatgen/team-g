@@ -232,8 +232,8 @@ export const PathologyResultPage = () => {
     // Prepare data rows
     const data: any[] = [];
     
-    // Header row - MUST match backend expectations exactly (updated for new columns)
-    data.push(['__field_id__', 'Parameter', 'Value', 'Unit', 'Report Range', 'Standard Range', 'Status', 'Method', 'Is Standard', 'Source']);
+    // Header row - MUST match backend expectations exactly (matches excel_export.py COLUMNS)
+    data.push(['__field_id__', 'Parameter', 'Original Name', 'Value', 'Unit', 'Report Range', 'Standard Range', 'Status', 'Method', 'Is Standard', 'Source']);
     
     // Metadata row
     data.push(['__meta__', `case_id=${id}`, `version=${pathologyData.version}`, `fields_count=${fieldsArray.length}`]);
@@ -245,6 +245,7 @@ export const PathologyResultPage = () => {
       data.push([
         field.id,
         field.key || field.parameter_name || field.field_name || '',
+        field.reference_name || '',        // Original Name
         value || '',
         field.unit || '',
         referenceRange || '',              // Report Range (editable)
