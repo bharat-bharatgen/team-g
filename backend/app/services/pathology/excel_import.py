@@ -168,6 +168,41 @@ def _build_updated_fields(
     return updated_fields
 
 
+def _sync_standardized(
+    prev_standardized: dict,
+    updated_fields: List[PathologyField],
+) -> dict:
+    """
+    Sync updated field values back into standardized.tests.
+
+    The risk processor reads from standardized.tests, so edits to fields
+    must be reflected there. Matches by standard_name/key.
+    """
+    import copy
+    standardized = copy.deepcopy(prev_standardized)
+
+    tests = standardized.get("tests")
+    if not isinstance(tests, list):
+        return standardized
+
+    # Build lookup from field key → updated field
+    field_by_key: Dict[str, PathologyField] = {f.key: f for f in updated_fields}
+
+    for test in tests:
+        name = test.get("standard_name") or test.get("original_name", "")
+        field = field_by_key.get(name)
+        if field is None:
+            continue
+        test["value"] = field.value
+        test["unit"] = field.unit
+        test["range"] = field.reference_range
+        test["flag"] = field.flag
+        if field.method is not None:
+            test["method"] = field.method
+
+    return standardized
+
+
 def import_excel(
     file_bytes: bytes,
     prev_result: PathologyResultModel,
@@ -195,6 +230,10 @@ def import_excel(
     # Build updated fields
     updated_fields = _build_updated_fields(excel_rows, prev_result.fields)
 
+    # Sync edited field values into standardized.tests so downstream
+    # consumers (risk, test verification) see the updated data.
+    standardized = _sync_standardized(prev_result.standardized, updated_fields)
+
     # Create new snapshot
     new_result = PathologyResultModel(
         case_id=prev_result.case_id,
@@ -204,7 +243,7 @@ def import_excel(
         patient_info=prev_result.patient_info,
         lab_info=prev_result.lab_info,
         report_info=prev_result.report_info,
-        standardized=prev_result.standardized,
+        standardized=standardized,
         fields=updated_fields,
         created_at=datetime.utcnow(),
     )
