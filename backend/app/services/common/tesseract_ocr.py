@@ -16,6 +16,10 @@ warnings.simplefilter('ignore', Image.DecompressionBombWarning)
 
 logger = logging.getLogger(__name__)
 
+# LiteLLM/vision models reject images above 178_956_970 pixels.
+# Cap rendered pages to stay safely under that limit.
+_MAX_PIXELS = 170_000_000
+
 # Lock for PyMuPDF (fitz) - NOT thread-safe on macOS
 _fitz_lock = Lock()
 
@@ -96,15 +100,31 @@ def pdf_to_page_images(pdf_bytes: bytes) -> list[dict]:
     """
     Convert each page of a PDF to a PNG image.
     Returns list of {"page_number": int, "image_bytes": bytes} (no OCR yet).
-    
+
     Uses a lock because PyMuPDF (fitz) is NOT thread-safe on macOS.
+    Large pages are rendered at a reduced DPI so the pixel count stays
+    under _MAX_PIXELS (the LiteLLM vision-model limit).
     """
     with _fitz_lock:
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
         pages = []
         for page_num in range(len(doc)):
             page = doc[page_num]
-            pix = page.get_pixmap(dpi=300)
+            # Try 300 DPI first; downscale if the image would be too large
+            dpi = 300
+            rect = page.rect  # dimensions in points (1 pt = 1/72 in)
+            width_px = rect.width * dpi / 72
+            height_px = rect.height * dpi / 72
+            total_px = width_px * height_px
+            if total_px > _MAX_PIXELS:
+                scale = (_MAX_PIXELS / total_px) ** 0.5
+                dpi = int(dpi * scale)
+                logger.info(
+                    "Page %d too large (%.0fM px at 300 DPI) — "
+                    "reducing to %d DPI",
+                    page_num + 1, total_px / 1e6, dpi,
+                )
+            pix = page.get_pixmap(dpi=dpi)
             img_bytes = pix.tobytes("png")
             pages.append({
                 "page_number": page_num + 1,
@@ -160,17 +180,18 @@ async def ocr_image_async(image_bytes: bytes) -> str:
 
 async def extract_from_file(file_bytes: bytes, content_type: str) -> list[dict]:
     """
-    Extract OCR text from a file (PDF or image), with parallel OCR across pages.
+    Extract OCR text from a file (PDF or image).
+
+    Pages are OCR'd sequentially to avoid flooding the process pool with
+    large images and causing OOM kills in child processes.
 
     Returns:
         List of dicts: [{"page_number": 1, "text": "...", "image_bytes": b"..."}, ...]
     """
     if content_type == "application/pdf":
         page_images = pdf_to_page_images(file_bytes)
-        ocr_tasks = [ocr_image_async(p["image_bytes"]) for p in page_images]
-        ocr_texts = await asyncio.gather(*ocr_tasks)
-        for page_info, text in zip(page_images, ocr_texts):
-            page_info["text"] = text
+        for page_info in page_images:
+            page_info["text"] = await ocr_image_async(page_info["image_bytes"])
         return page_images
     else:
         text = await ocr_image_async(file_bytes)
